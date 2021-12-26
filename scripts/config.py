@@ -14,13 +14,26 @@
 # limitations under the License.
 
 import argparse
-import datetime
 import enum
 import logging
 import os
 from typing import Optional, Set, TYPE_CHECKING
 
 import execution
+import util
+
+DEFAULT_REVISION = '13.0.0'
+
+
+@enum.unique
+class SourceType(enum.Enum):
+    """Enumeration for the SourceType value in versions.yml:
+       STANDALONE - the source contains just the build scripts, LLVM and newlib
+                    need to be checked out separately
+       SOURCE_PACKAGE - the source contains LLVM and newlib bundled with the
+                        build scripts"""
+    STANDALONE = 'standalone-build-scripts'
+    SOURCE_PACKAGE = 'source-package'
 
 
 @enum.unique
@@ -112,8 +125,9 @@ class Action(enum.Enum):
     CONFIGURE = 'configure'
     PACKAGE = 'package'
     ALL = 'all'
-    # The 'test' phase is not part of 'all'
+    # The 'test' and 'package-src' phases are not part of 'all'
     TEST = 'test'
+    PACKAGE_SRC = 'package-src'
 
 
 @enum.unique
@@ -155,6 +169,14 @@ class Toolchain:  # pylint: disable=too-few-public-methods
         assert result, ('Failed to parse "{} -print-search-dirs" '
                         'output'.format(self.c_compiler))
         return result
+
+    def get_version_string(self) -> str:
+        """Returns full version string of the C compiler."""
+        lines = execution.run_stdout([self.c_compiler, '--version'])
+        # Example output:
+        # Ubuntu 20.04 mingw: "x86_64-w64-mingw32-gcc (GCC) 9.3-win32 20200320"
+        # Ubuntu 16.04 mingw: "x86_64-w64-mingw32-gcc (GCC) 5.3.1 20160211"
+        return lines[0].strip()
 
 
 class LibrarySpec:
@@ -234,6 +256,11 @@ def _assign_dir(arg, default, rev):
     return os.path.abspath(res)
 
 
+def _warn_source_package_unsupported(feature: str) -> None:
+    logging.warning('%s is not supported when building from '
+                    'source package, ignoring', feature)
+
+
 class Config:  # pylint: disable=too-many-instance-attributes
     # pylint: disable=too-few-public-methods
     """Configuration for the whole build process"""
@@ -256,30 +283,36 @@ class Config:  # pylint: disable=too-many-instance-attributes
             return 'aarch64-none-elf'
         return None
 
-    def _fill_args(self, args: argparse.Namespace):
-        if 'all' in args.variants:
-            variant_names = LIBRARY_SPECS.keys()
-        else:
-            variant_names = set(args.variants)
-        self.variants = [LIBRARY_SPECS[v] for v in sorted(variant_names)]
+    def _configure_source_type(self, args: argparse.Namespace):
+        self.source_dir = os.path.abspath(args.source_dir)
+        source_yaml = util.read_yaml(os.path.join(self.source_dir,
+                                                  'versions.yml'))
+        self.source_type = SourceType(source_yaml['SourceType'])
+        if self.source_type == SourceType.SOURCE_PACKAGE:
+            self.revision = source_yaml['Revision']
 
+    def _configure_actions(self, args: argparse.Namespace):
         if not args.actions or Action.ALL.value in args.actions:
+            # Actions that are not part of the "ALL" action:
+            exclude_from_all = [Action.ALL, Action.TEST, Action.PACKAGE_SRC]
+            if self.is_source_package:
+                exclude_from_all.append(Action.PREPARE)
             self.actions = set(action for action in Action
-                               if action not in (Action.ALL, Action.TEST))
-            if Action.TEST.value in args.actions:
-                self.actions.add(Action.TEST)
+                               if action not in exclude_from_all)
+            for action in [Action.TEST, Action.PACKAGE_SRC]:
+                if action.value in args.actions:
+                    self.actions.add(action)
         else:
             self.actions = set(Action(act_str) for act_str in args.actions)
 
-        self.default_target = self._default_target()
+        if self.is_source_package:
+            for action in [Action.PREPARE, Action.PACKAGE_SRC]:
+                if action.value in args.actions:
+                    _warn_source_package_unsupported(
+                        'action "{}"'.format(action.value))
+                    self.actions.remove(action)
 
-        rev = args.revision
-        self.revision = rev
-        self.source_dir = os.path.abspath(args.source_dir)
-        self.repos_dir = _assign_dir(args.repositories_dir, 'repos', rev)
-        self.build_dir = _assign_dir(args.build_dir, 'build', rev)
-        self.install_dir = _assign_dir(args.install_dir, 'install', rev)
-        self.package_dir = os.path.abspath(args.package_dir)
+    def _configure_toolchains(self, args: argparse.Namespace):
         # According to
         # https://docs.python.org/3.6/library/enum.html#using-a-custom-new:
         # "The __new__() method, if defined, is used during creation of the
@@ -296,15 +329,42 @@ class Config:  # pylint: disable=too-many-instance-attributes
         native_toolchain_dir = os.path.abspath(args.native_toolchain_dir)
         self.native_toolchain = Toolchain(native_toolchain_dir,
                                           native_toolchain_kind)
+
+        self.is_using_mingw = self.host_toolchain.kind == ToolchainKind.MINGW
+        self.is_windows = self.is_using_mingw
+        self.is_cross_compiling = (os.name == 'posix' and self.is_windows)
+
+    def _fill_args(self, args: argparse.Namespace):
+        variant_names = (LIBRARY_SPECS.keys() if 'all' in args.variants
+                         else set(args.variants))
+        self.variants = [LIBRARY_SPECS[v] for v in sorted(variant_names)]
+
+        self.default_target = self._default_target()
+
+        if self.is_source_package:
+            # For SOURCE_PACKAGE self.revision is set in _configure_source_type
+            assert self.revision is not None
+            rev = self.revision
+            self.repos_dir = self.source_dir
+            if args.repositories_dir is not None:
+                _warn_source_package_unsupported('--repositories-dir')
+            if args.revision is not None:
+                _warn_source_package_unsupported('--revision')
+        else:
+            rev = (args.revision if args.revision is not None
+                   else DEFAULT_REVISION)
+            self.revision = rev
+            self.repos_dir = _assign_dir(args.repositories_dir, 'repos', rev)
+
+        self.build_dir = _assign_dir(args.build_dir, 'build', rev)
+        self.install_dir = _assign_dir(args.install_dir, 'install', rev)
+        self.package_dir = os.path.abspath(args.package_dir)
         self.checkout_mode = CheckoutMode(args.checkout_mode)
         self.build_mode = BuildMode(args.build_mode)
 
-        is_using_mingw = self.host_toolchain.kind == ToolchainKind.MINGW
-        is_windows = is_using_mingw
-
         copy_runtime = CopyRuntime(args.copy_runtime_dlls)
         self.ask_copy_runtime_dlls = True
-        if is_using_mingw:
+        if self.is_using_mingw:
             self.ask_copy_runtime_dlls = (copy_runtime == CopyRuntime.ASK)
             if not self.ask_copy_runtime_dlls:
                 self._copy_runtime_dlls = (copy_runtime == CopyRuntime.YES)
@@ -316,7 +376,7 @@ class Config:  # pylint: disable=too-many-instance-attributes
             self._copy_runtime_dlls = False
 
         if args.package_format is None:
-            self.package_format = (PackageFormat.ZIP if is_windows else
+            self.package_format = (PackageFormat.ZIP if self.is_windows else
                                    PackageFormat.TGZ)
         else:
             self.package_format = PackageFormat(args.package_format)
@@ -338,30 +398,29 @@ class Config:  # pylint: disable=too-many-instance-attributes
     def copy_runtime_dlls(self, value: bool) -> None:
         self._copy_runtime_dlls = value
 
+    @property
+    def is_source_package(self) -> bool:
+        """True iff building from a bundled source (i.e. build scripts, LLVM
+           and newlib) rather than a repository containing just the build
+           scripts."""
+        assert self.source_type is not None
+        return self.source_type == SourceType.SOURCE_PACKAGE
+
     def _fill_inferred(self):
         """Fill in additional fields that can be inferred from the
            configuration, but are still useful for convenience."""
         join = os.path.join
         self.llvm_repo_dir = join(self.repos_dir, 'llvm.git')
         self.newlib_repo_dir = join(self.repos_dir, 'newlib.git')
-        is_using_mingw = self.host_toolchain.kind == ToolchainKind.MINGW
-        self.is_cross_compiling = (os.name == 'posix' and is_using_mingw)
-        self.is_windows = is_using_mingw
         self.cmake_generator = 'Ninja' if self.use_ninja else 'Unix Makefiles'
-        self.release_mode = self.revision != 'HEAD'
-        if self.release_mode:
-            version_suffix = '-' + self.revision
-            self.version_string = self.revision
-        else:
-            version_suffix = ''
-            now = datetime.datetime.now()
-            self.version_string = now.strftime('%Y-%m-%d-%H:%M:%S')
+        self.version_string = self.revision
         self.skip_reconfigure = self.build_mode == BuildMode.INCREMENTAL
-        product_name = 'LLVMEmbeddedToolchainForArm'
-        self.package_base_name = product_name + version_suffix
-        self.target_llvm_dir = join(
-            self.install_dir,
-            '{}-{}'.format(product_name, self.revision))
+        bin_name = 'LLVMEmbeddedToolchainForArm-{}'.format(self.revision)
+        src_name = bin_name + '-src'
+        self.bin_package_base_name = bin_name
+        self.src_package_base_name = src_name
+        self.target_llvm_dir = join(self.install_dir, bin_name)
+        self.install_src_subdir = join(self.install_dir, src_name)
         if self.is_cross_compiling:
             self.native_llvm_build_dir = join(self.build_dir, 'native-llvm')
             self.native_llvm_dir = join(self.install_dir, 'native-llvm')
@@ -377,5 +436,8 @@ class Config:  # pylint: disable=too-many-instance-attributes
 
     def __init__(self, args: argparse.Namespace):
         self._copy_runtime_dlls = None
+        self._configure_source_type(args)
+        self._configure_actions(args)
+        self._configure_toolchains(args)
         self._fill_args(args)
         self._fill_inferred()
