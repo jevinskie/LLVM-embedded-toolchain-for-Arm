@@ -404,7 +404,7 @@ class ToolchainBuild:
         cmake_libcxxabi_defs = {
             'LIBCXXABI_ENABLE_SHARED:BOOL': 'OFF',
             'LIBCXXABI_ENABLE_STATIC:BOOL': 'ON',
-            'LIBCXXABI_ENABLE_EXCEPTIONS:BOOL': 'OFF',
+            'LIBCXXABI_ENABLE_EXCEPTIONS:BOOL': 'ON',
             'LIBCXXABI_ENABLE_ASSERTIONS:BOOL': 'OFF',
             'LIBCXXABI_ENABLE_PIC:BOOL': 'OFF',
             'LIBCXXABI_USE_COMPILER_RT:BOOL': 'ON',
@@ -424,16 +424,19 @@ class ToolchainBuild:
             'LIBCXX_ENABLE_STATIC:BOOL': 'ON',
             'LIBCXX_ENABLE_FILESYSTEM:BOOL': 'OFF',
             'LIBCXX_ENABLE_PARALLEL_ALGORITHMS:BOOL': 'OFF',
-            'LIBCXX_ENABLE_EXPERIMENTAL_LIBRARY:BOOL': 'OFF',
+            'LIBCXX_ENABLE_EXPERIMENTAL_LIBRARY:BOOL': 'ON',
             'LIBCXX_ENABLE_DEBUG_MODE_SUPPORT:BOOL': 'OFF',
             'LIBCXX_ENABLE_RANDOM_DEVICE:BOOL': 'OFF',
-            'LIBCXX_ENABLE_LOCALIZATION:BOOL': 'OFF',
-            'LIBCXX_ENABLE_EXCEPTIONS:BOOL': 'OFF',
-            'LIBCXX_ENABLE_RTTI:BOOL': 'OFF',
+            'LIBCXX_ENABLE_LOCALIZATION:BOOL': 'ON',
+            'LIBCXX_ENABLE_EXCEPTIONS:BOOL': 'ON',
+            'LIBCXX_ENABLE_RTTI:BOOL': 'ON',
             'LIBCXX_ENABLE_THREADS:BOOL': 'OFF',
             'LIBCXX_ENABLE_MONOTONIC_CLOCK:BOOL': 'OFF',
             'LIBCXX_INCLUDE_BENCHMARKS:BOOL': 'OFF',
             'LIBCXX_CXX_ABI:STRING': 'libcxxabi',
+            'LIBCXX_ABI_UNSTABLE:BOOL': 'ON',
+            'LIBCXX_ENABLE_UNICODE:BOOL': 'ON',
+            'LIBCXX_ENABLE_WIDE_CHARACTERS:BOOL': 'ON',
         }
 
         cmake_libunwind_defs = {
@@ -442,7 +445,7 @@ class ToolchainBuild:
             'LIBUNWIND_ENABLE_THREADS:BOOL': 'OFF',
             'LIBUNWIND_USE_COMPILER_RT:BOOL': 'ON',
             'LIBUNWIND_IS_BAREMETAL:BOOL': 'ON',
-            'LIBUNWIND_REMEMBER_HEAP_ALLOC:BOOL': 'ON',
+            'LIBUNWIND_REMEMBER_HEAP_ALLOC:BOOL': 'OFF',
         }
 
         libs = [
@@ -570,8 +573,11 @@ class ToolchainBuild:
             '--enable-newlib-register-fini',
             '--disable-newlib-supplied-syscalls',
             '--enable-newlib-io-c99-formats',
-            '--disable-nls',
+            '--enable-nls',
             '--enable-lite-exit',
+            '--enable-newlib-mb',
+            '--enable-newlib-iconv',
+            '--enable-newlib-iconv-encodings=ascii,utf8',
         ]
         make_args = [
             'make',

@@ -597,6 +597,18 @@ index 77762d554512..601c43330434 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
+diff --git a/libunwind/src/config.h b/libunwind/src/config.h
+index f469d3c232e6..706eb7759200 100644
+--- a/libunwind/src/config.h
++++ b/libunwind/src/config.h
+@@ -13,6 +13,7 @@
+ #ifndef LIBUNWIND_CONFIG_H
+ #define LIBUNWIND_CONFIG_H
+
++#include <alloca.h>
+ #include <assert.h>
+ #include <stdio.h>
+ #include <stdint.h>
 diff --git a/llvm/lib/Support/CommandLine.cpp b/llvm/lib/Support/CommandLine.cpp
 index 6c140863b13c..caab14d29020 100644
 --- a/llvm/lib/Support/CommandLine.cpp
@@ -663,3 +675,23 @@ index 6c140863b13c..caab14d29020 100644
        continue;
  
      StringRef FileName(Arg + 1);
+diff --git a/clang/lib/Basic/Targets/AArch64.cpp b/clang/lib/Basic/Targets/AArch64.cpp
+index 4089a393b762..81e0d642d527 100644
+--- a/clang/lib/Basic/Targets/AArch64.cpp
++++ b/clang/lib/Basic/Targets/AArch64.cpp
+@@ -247,8 +247,13 @@ void AArch64TargetInfo::getTargetDefines(const LangOptions &Opts,
+   Builder.defineMacro("__aarch64__");
+   // For bare-metal.
+   if (getTriple().getOS() == llvm::Triple::UnknownOS &&
+-      getTriple().isOSBinFormatELF())
+-    Builder.defineMacro("__ELF__");
++      getTriple().isOSBinFormatELF()) {
++      Builder.defineMacro("__ELF__");
++      // embedded arm toolchain hack
++      // Required by the libc++ locale support.
++      if (Opts.CPlusPlus)
++        Builder.defineMacro("_GNU_SOURCE");
++  }
+
+   // Target properties.
+   if (!getTriple().isOSWindows() && getTriple().isArch64Bit()) {

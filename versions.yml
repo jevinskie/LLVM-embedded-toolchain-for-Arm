@@ -46,7 +46,7 @@
   Modules:
     - Name: llvm.git
       FriendlyName: LLVM
-      URL:  https://github.com/llvm/llvm-project.git
+      URL:  ~/code/llvm/git/llvm-project
       Branch: main
       Revision: HEAD
       Patch: llvm-HEAD.patch
