@@ -276,7 +276,7 @@ class ToolchainBuild:
         cfg = self.cfg
         join = os.path.join
         flags = (lib_spec.flags
-                 + ' -ffunction-sections -fdata-sections -fno-ident -flto=full'
+                 + ' -D_POSIX_C_SOURCE -ffunction-sections -fdata-sections -fno-ident -flto=full'
                  + ' --sysroot {}'.format(join(cfg.target_llvm_rt_dir,
                                                lib_spec.name)))
         defs = {
@@ -420,8 +420,9 @@ class ToolchainBuild:
             'LIBCXX_INCLUDE_BENCHMARKS:BOOL': 'OFF',
             'LIBCXX_CXX_ABI:STRING': 'libcxxabi',
             'LIBCXX_ABI_UNSTABLE:BOOL': 'ON',
-            'LIBCXX_ENABLE_UNICODE:BOOL': 'ON',
-            'LIBCXX_ENABLE_WIDE_CHARACTERS:BOOL': 'ON',
+            'LIBCXX_ENABLE_UNICODE:BOOL': 'OFF',
+            'LIBCXX_ENABLE_WIDE_CHARACTERS:BOOL': 'OFF',
+            'LIBCXX_ENABLE_LOCALIZATION_STUBS:BOOL': 'ON',
         }
 
         cmake_libunwind_defs = {
@@ -558,11 +559,8 @@ class ToolchainBuild:
             '--enable-newlib-register-fini',
             '--disable-newlib-supplied-syscalls',
             '--enable-newlib-io-c99-formats',
-            '--enable-nls',
+            '--disable-nls',
             '--enable-lite-exit',
-            '--enable-newlib-mb',
-            '--enable-newlib-iconv',
-            '--enable-newlib-iconv-encodings=ascii,utf8',
         ]
         make_args = [
             'make',

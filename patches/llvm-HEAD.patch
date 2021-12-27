@@ -1,18 +1,286 @@
+diff --git a/clang/lib/Driver/ToolChains/BareMetal.cpp b/clang/lib/Driver/ToolChains/BareMetal.cpp
+index cd07692be358..7280be85669c 100644
+--- a/clang/lib/Driver/ToolChains/BareMetal.cpp
++++ b/clang/lib/Driver/ToolChains/BareMetal.cpp
+@@ -301,6 +301,8 @@ void BareMetal::AddLinkRuntimeLib(const ArgList &Args,
+   llvm_unreachable("Unhandled RuntimeLibType.");
+ }
+ 
++bool BareMetal::HasNativeLLVMSupport() const { return true; }
++
+ void baremetal::Linker::ConstructJob(Compilation &C, const JobAction &JA,
+                                      const InputInfo &Output,
+                                      const InputInfoList &Inputs,
+diff --git a/clang/lib/Driver/ToolChains/BareMetal.h b/clang/lib/Driver/ToolChains/BareMetal.h
+index dc718e09ad43..ce3df5a983a8 100644
+--- a/clang/lib/Driver/ToolChains/BareMetal.h
++++ b/clang/lib/Driver/ToolChains/BareMetal.h
+@@ -75,6 +75,8 @@ public:
+   void AddLinkRuntimeLib(const llvm::opt::ArgList &Args,
+                          llvm::opt::ArgStringList &CmdArgs) const;
+   std::string computeSysRoot() const override;
++
++  bool HasNativeLLVMSupport() const override;
+ };
+ 
+ } // namespace toolchains
+diff --git a/compiler-rt/cmake/Modules/AddCompilerRT.cmake b/compiler-rt/cmake/Modules/AddCompilerRT.cmake
+index b69833cbcc09..569aa146b6e9 100644
+--- a/compiler-rt/cmake/Modules/AddCompilerRT.cmake
++++ b/compiler-rt/cmake/Modules/AddCompilerRT.cmake
+@@ -227,7 +227,7 @@ function(add_compiler_rt_runtime name type)
+       list_intersect(LIB_ARCHS_${libname} DARWIN_${os}_ARCHS LIB_ARCHS)
+       if(LIB_ARCHS_${libname})
+         list(APPEND libnames ${libname})
+-        set(extra_cflags_${libname} ${DARWIN_${os}_CFLAGS} ${NO_LTO_FLAGS} ${NO_PGO_FLAGS} ${LIB_CFLAGS})
++        set(extra_cflags_${libname} ${DARWIN_${os}_CFLAGS} ${NO_PGO_FLAGS} ${LIB_CFLAGS})
+         set(output_name_${libname} ${libname}${COMPILER_RT_OS_SUFFIX})
+         set(sources_${libname} ${LIB_SOURCES})
+         format_object_libs(sources_${libname} ${os} ${LIB_OBJECT_LIBS})
+@@ -268,7 +268,7 @@ function(add_compiler_rt_runtime name type)
+       set(sources_${libname} ${LIB_SOURCES})
+       format_object_libs(sources_${libname} ${arch} ${LIB_OBJECT_LIBS})
+       set(libnames ${libnames} ${libname})
+-      set(extra_cflags_${libname} ${TARGET_${arch}_CFLAGS} ${NO_LTO_FLAGS} ${NO_PGO_FLAGS} ${LIB_CFLAGS})
++      set(extra_cflags_${libname} ${TARGET_${arch}_CFLAGS} ${NO_PGO_FLAGS} ${LIB_CFLAGS})
+       get_compiler_rt_output_dir(${arch} output_dir_${libname})
+       get_compiler_rt_install_dir(${arch} install_dir_${libname})
+     endforeach()
+diff --git a/libcxx/CMakeLists.txt b/libcxx/CMakeLists.txt
+index 03a6a0781b5a..76d6f0f33024 100644
+--- a/libcxx/CMakeLists.txt
++++ b/libcxx/CMakeLists.txt
+@@ -108,6 +108,8 @@ option(LIBCXX_ENABLE_LOCALIZATION
+    the C locale API (e.g. embedded). When localization is not supported,
+    several parts of the library will be disabled: <iostream>, <regex>, <locale>
+    will be completely unusable, and other parts may be only partly available." ON)
++option(LIBCXX_ENABLE_LOCALIZATION_STUBS
++  "Whether to use NOP stubs for localization." OFF)
+ option(LIBCXX_ENABLE_UNICODE
+   "Whether to include support for Unicode in the library. Disabling Unicode can
+    be useful when porting to platforms that don't support UTF-8 encoding (e.g.
+@@ -890,6 +892,7 @@ config_define_if(LIBCXX_ENABLE_PARALLEL_ALGORITHMS _LIBCPP_HAS_PARALLEL_ALGORITH
+ config_define_if_not(LIBCXX_ENABLE_FILESYSTEM _LIBCPP_HAS_NO_FILESYSTEM_LIBRARY)
+ config_define_if_not(LIBCXX_ENABLE_RANDOM_DEVICE _LIBCPP_HAS_NO_RANDOM_DEVICE)
+ config_define_if_not(LIBCXX_ENABLE_LOCALIZATION _LIBCPP_HAS_NO_LOCALIZATION)
++config_define(LIBCXX_ENABLE_LOCALIZATION_STUBS _LIBCPP_HAS_LOCALIZATION_STUBS)
+ config_define_if_not(LIBCXX_ENABLE_UNICODE _LIBCPP_HAS_NO_UNICODE)
+ config_define_if_not(LIBCXX_ENABLE_WIDE_CHARACTERS _LIBCPP_HAS_NO_WIDE_CHARACTERS)
+ config_define_if_not(LIBCXX_ENABLE_VENDOR_AVAILABILITY_ANNOTATIONS _LIBCPP_HAS_NO_VENDOR_AVAILABILITY_ANNOTATIONS)
+diff --git a/libcxx/include/__bsd_locale_fallbacks.h b/libcxx/include/__bsd_locale_fallbacks.h
+index a5788d9777b5..f9acfc0d5c48 100644
+--- a/libcxx/include/__bsd_locale_fallbacks.h
++++ b/libcxx/include/__bsd_locale_fallbacks.h
+@@ -123,8 +123,23 @@ int __libcpp_asprintf_l(char **__s, locale_t __l, const char *__format, ...) {
+     va_list __va;
+     va_start(__va, __format);
+     __libcpp_locale_guard __current(__l);
++#if defined(__NEWLIB__) && !__GNU_VISIBLE
++    va_list __va_dup;
++    va_copy(__va_dup, __va);
++    int __len = vsnprintf(nullptr, 0, __format, __va);
++    va_end(__va);
++
++    if (__len < 0) return __len;
++
++    *__s = (char *)malloc(__len + 1u);
++    if (!__s) return -1;
++
++    int __res = vsnprintf(*__s, __len + 1u, __format, __va_dup);
++    va_end(__va_dup);
++#else
+     int __res = vasprintf(__s, __format, __va);
+     va_end(__va);
++#endif
+     return __res;
+ }
+ 
+diff --git a/libcxx/include/__config_site.in b/libcxx/include/__config_site.in
+index 59ca22981242..bc1a6466b418 100644
+--- a/libcxx/include/__config_site.in
++++ b/libcxx/include/__config_site.in
+@@ -30,6 +30,7 @@
+ #cmakedefine _LIBCPP_HAS_PARALLEL_ALGORITHMS
+ #cmakedefine _LIBCPP_HAS_NO_RANDOM_DEVICE
+ #cmakedefine _LIBCPP_HAS_NO_LOCALIZATION
++#cmakedefine _LIBCPP_HAS_LOCALIZATION_STUBS
+ #cmakedefine _LIBCPP_HAS_NO_WIDE_CHARACTERS
+ #cmakedefine _LIBCPP_HAS_NO_INCOMPLETE_FORMAT
+ #cmakedefine _LIBCPP_HAS_NO_INCOMPLETE_RANGES
+diff --git a/libcxx/include/__locale b/libcxx/include/__locale
+index 2582a90bb578..5dd2f2ad30ca 100644
+--- a/libcxx/include/__locale
++++ b/libcxx/include/__locale
+@@ -17,8 +17,39 @@
+ #include <utility>
+ #include <mutex>
+ #include <cstdint>
++
++// for isascii on newlib
++#if defined(_NEWLIB_VERSION) && !__XSI_VISIBLE
++#   undef __XSI_VISIBLE
++#   define __XSI_VISIBLE 1
++#   define _LIBCPP_LOCALE_SHOULD_UNDEF_XSI_VISIBLE
++#endif
++
+ #include <cctype>
++
++#ifdef _LIBCPP_LOCALE_SHOULD_UNDEF_XSI_VISIBLE
++#   undef __XSI_VISIBLE
++#   define __XSI_VISIBLE 0
++#   undef _LIBCPP_LOCALE_SHOULD_UNDEF_XSI_VISIBLE
++#endif
++
++// don't get a few of newlib's locale definitons
++#if defined(_NEWLIB_VERSION) && __POSIX_VISIBLE >= 200809
++#   define _LIBCPP_LOCALE_SHOULD_UNDEF_POSIX_VISIBLE_ORIG_DEF __POSIX_VISIBLE
++#   undef __POSIX_VISIBLE
++#   define __POSIX_VISIBLE 200112
++#   define _LIBCPP_LOCALE_SHOULD_UNDEF_POSIX_VISIBLE
++#endif
++
+ #include <locale.h>
++
++#ifdef _LIBCPP_LOCALE_SHOULD_UNDEF_POSIX_VISIBLE
++#   undef __POSIX_VISIBLE
++#   define __POSIX_VISIBLE _LIBCPP_LOCALE_SHOULD_UNDEF_POSIX_VISIBLE_ORIG_DEF
++#   undef _LIBCPP_LOCALE_SHOULD_UNDEF_POSIX_VISIBLE_ORIG_DEF
++#   undef _LIBCPP_LOCALE_SHOULD_UNDEF_POSIX_VISIBLE
++#endif
++
+ #if defined(_LIBCPP_MSVCRT_LIKE)
+ # include <cstring>
+ # include <__support/win32/locale_win32.h>
+diff --git a/libcxx/include/__mbstate_t.h b/libcxx/include/__mbstate_t.h
+index 3489f9cc0e3a..fb7908387c56 100644
+--- a/libcxx/include/__mbstate_t.h
++++ b/libcxx/include/__mbstate_t.h
+@@ -31,6 +31,9 @@
+ #   include <bits/types/mbstate_t.h> // works on most Unixes
+ #elif __has_include(<sys/_types/_mbstate_t.h>)
+ #   include <sys/_types/_mbstate_t.h> // works on Darwin
++#elif __has_include(<sys/_types.h>) && __has_include(<_newlib_version.h>)
++#   include <sys/_types.h>
++typedef _mbstate_t mbstate_t;
+ #else
+ #   error "The library was configured without support for wide-characters, but we don't know how to get the definition of mbstate_t without <wchar.h> on your platform."
+ #endif
+diff --git a/libcxx/include/__support/newlib/xlocale.h b/libcxx/include/__support/newlib/xlocale.h
+index b75f9263a4c4..fdf38b9a4b19 100644
+--- a/libcxx/include/__support/newlib/xlocale.h
++++ b/libcxx/include/__support/newlib/xlocale.h
+@@ -13,10 +13,13 @@
+ 
+ #include <cstdlib>
+ #include <clocale>
++#ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
+ #include <cwctype>
++#endif
+ #include <ctype.h>
+-#if !defined(__NEWLIB__) || __NEWLIB__ < 2 || \
+-    __NEWLIB__ == 2 && __NEWLIB_MINOR__ < 5
++#if (!defined(__NEWLIB__) || __NEWLIB__ < 2 || \
++   __NEWLIB__ == 2 && __NEWLIB_MINOR__ < 5) || \
++   defined(_LIBCPP_HAS_LOCALIZATION_STUBS)
+ #include <__support/xlocale/__nop_locale_mgmt.h>
+ #include <__support/xlocale/__posix_l_fallback.h>
+ #include <__support/xlocale/__strtonum_fallback.h>
+diff --git a/libcxx/include/__support/xlocale/__nop_locale_mgmt.h b/libcxx/include/__support/xlocale/__nop_locale_mgmt.h
+index 57b18842ff45..3e640f1d0e28 100644
+--- a/libcxx/include/__support/xlocale/__nop_locale_mgmt.h
++++ b/libcxx/include/__support/xlocale/__nop_locale_mgmt.h
+@@ -15,7 +15,14 @@ extern "C" {
+ #endif
+ 
+ // Patch over lack of extended locale support
++
++#if !defined(__NEWLIB__) || __NEWLIB__ < 2 || \
++   __NEWLIB__ == 2 && __NEWLIB_MINOR__ < 5
+ typedef void *locale_t;
++#else
++#   include <sys/_locale.h>
++#endif
++
+ static inline locale_t duplocale(locale_t) {
+   return NULL;
+ }
+diff --git a/libcxx/include/__support/xlocale/__posix_l_fallback.h b/libcxx/include/__support/xlocale/__posix_l_fallback.h
+index 00d69d19e8c8..7365711c9145 100644
+--- a/libcxx/include/__support/xlocale/__posix_l_fallback.h
++++ b/libcxx/include/__support/xlocale/__posix_l_fallback.h
+@@ -67,6 +67,7 @@ inline _LIBCPP_INLINE_VISIBILITY int isxdigit_l(int c, locale_t) {
+   return ::isxdigit(c);
+ }
+ 
++#ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
+ inline _LIBCPP_INLINE_VISIBILITY int iswalnum_l(wint_t c, locale_t) {
+   return ::iswalnum(c);
+ }
+@@ -114,6 +115,7 @@ inline _LIBCPP_INLINE_VISIBILITY int iswupper_l(wint_t c, locale_t) {
+ inline _LIBCPP_INLINE_VISIBILITY int iswxdigit_l(wint_t c, locale_t) {
+   return ::iswxdigit(c);
+ }
++#endif // _LIBCPP_HAS_NO_WIDE_CHARACTERS
+ 
+ inline _LIBCPP_INLINE_VISIBILITY int toupper_l(int c, locale_t) {
+   return ::toupper(c);
+@@ -123,6 +125,7 @@ inline _LIBCPP_INLINE_VISIBILITY int tolower_l(int c, locale_t) {
+   return ::tolower(c);
+ }
+ 
++#ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
+ inline _LIBCPP_INLINE_VISIBILITY wint_t towupper_l(wint_t c, locale_t) {
+   return ::towupper(c);
+ }
+@@ -130,6 +133,7 @@ inline _LIBCPP_INLINE_VISIBILITY wint_t towupper_l(wint_t c, locale_t) {
+ inline _LIBCPP_INLINE_VISIBILITY wint_t towlower_l(wint_t c, locale_t) {
+   return ::towlower(c);
+ }
++#endif // _LIBCPP_HAS_NO_WIDE_CHARACTERS
+ 
+ inline _LIBCPP_INLINE_VISIBILITY int strcoll_l(const char *s1, const char *s2,
+                                                locale_t) {
+@@ -147,6 +151,7 @@ inline _LIBCPP_INLINE_VISIBILITY size_t strftime_l(char *s, size_t max,
+   return ::strftime(s, max, format, tm);
+ }
+ 
++#ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
+ inline _LIBCPP_INLINE_VISIBILITY int wcscoll_l(const wchar_t *ws1,
+                                                const wchar_t *ws2, locale_t) {
+   return ::wcscoll(ws1, ws2);
+@@ -156,6 +161,7 @@ inline _LIBCPP_INLINE_VISIBILITY size_t wcsxfrm_l(wchar_t *dest, const wchar_t *
+                                                   size_t n, locale_t) {
+   return ::wcsxfrm(dest, src, n);
+ }
++#endif // _LIBCPP_HAS_NO_WIDE_CHARACTERS
+ 
+ #ifdef __cplusplus
+ }
+diff --git a/libcxx/include/__support/xlocale/__strtonum_fallback.h b/libcxx/include/__support/xlocale/__strtonum_fallback.h
+index 1172a5d57236..e0cd55f4c5bb 100644
+--- a/libcxx/include/__support/xlocale/__strtonum_fallback.h
++++ b/libcxx/include/__support/xlocale/__strtonum_fallback.h
+@@ -44,6 +44,7 @@ strtoull_l(const char *nptr, char **endptr, int base, locale_t) {
+   return ::strtoull(nptr, endptr, base);
+ }
+ 
++#ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
+ inline _LIBCPP_INLINE_VISIBILITY long long
+ wcstoll_l(const wchar_t *nptr, wchar_t **endptr, int base, locale_t) {
+   return ::wcstoll(nptr, endptr, base);
+@@ -58,6 +59,7 @@ inline _LIBCPP_INLINE_VISIBILITY long double wcstold_l(const wchar_t *nptr,
+                                                        wchar_t **endptr, locale_t) {
+   return ::wcstold(nptr, endptr);
+ }
++#endif // _LIBCPP_HAS_NO_WIDE_CHARACTERS
+ 
+ #ifdef __cplusplus
+ }
 diff --git a/libcxx/include/cmath b/libcxx/include/cmath
-index 0a7ff083eb62..5644467e5dc9 100644
+index b5c332c81ad6..24df9b30ea8d 100644
 --- a/libcxx/include/cmath
 +++ b/libcxx/include/cmath
-@@ -7,6 +7,9 @@
- //
- //===----------------------------------------------------------------------===//
- 
-+// Modifications copyright (C) 2021 Arm Limited (or its affiliates).
-+// All rights reserved.
-+
- #ifndef _LIBCPP_CMATH
- #define _LIBCPP_CMATH
- 
-@@ -531,7 +534,9 @@ using ::truncl _LIBCPP_USING_IF_EXISTS;
+@@ -531,7 +531,9 @@ using ::truncl _LIBCPP_USING_IF_EXISTS;
  #if _LIBCPP_STD_VER > 14
  inline _LIBCPP_INLINE_VISIBILITY float       hypot(       float x,       float y,       float z ) { return sqrt(x*x + y*y + z*z); }
  inline _LIBCPP_INLINE_VISIBILITY double      hypot(      double x,      double y,      double z ) { return sqrt(x*x + y*y + z*z); }
@@ -22,7 +290,7 @@ index 0a7ff083eb62..5644467e5dc9 100644
  
  template <class _A1, class _A2, class _A3>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -633,8 +638,10 @@ lerp(float __a, float __b, float __t)                   _NOEXCEPT { return __ler
+@@ -633,8 +635,10 @@ lerp(float __a, float __b, float __t)                   _NOEXCEPT { return __ler
  constexpr double
  lerp(double __a, double __b, double __t)                _NOEXCEPT { return __lerp(__a, __b, __t); }
  
@@ -33,21 +301,25 @@ index 0a7ff083eb62..5644467e5dc9 100644
  
  #endif // _LIBCPP_STD_VER > 17
  
+diff --git a/libcxx/include/cwchar b/libcxx/include/cwchar
+index e07f2df98450..96602652ee2e 100644
+--- a/libcxx/include/cwchar
++++ b/libcxx/include/cwchar
+@@ -103,7 +103,9 @@ size_t wcsrtombs(char* restrict dst, const wchar_t** restrict src, size_t len,
+ */
+ 
+ #include <__config>
++#ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
+ #include <cwctype>
++#endif // _LIBCPP_HAS_NO_WIDE_CHARACTERS
+ #include <wchar.h>
+ 
+ #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 diff --git a/libcxx/include/math.h b/libcxx/include/math.h
-index 8cbbc54a623f..e65592e076a8 100644
+index 850cdcfb32f6..8f15d3406861 100644
 --- a/libcxx/include/math.h
 +++ b/libcxx/include/math.h
-@@ -7,6 +7,9 @@
- //
- //===----------------------------------------------------------------------===//
- 
-+// Modifications copyright (C) 2021 Arm Limited (or its affiliates).
-+// All rights reserved.
-+
- #ifndef _LIBCPP_MATH_H
- #define _LIBCPP_MATH_H
- 
-@@ -790,8 +793,10 @@ isunordered(_A1 __lcpp_x, _A2 __lcpp_y) _NOEXCEPT
+@@ -790,8 +790,10 @@ isunordered(_A1 __lcpp_x, _A2 __lcpp_y) _NOEXCEPT
  
  #if !(defined(_AIX) || defined(__sun__))
  inline _LIBCPP_INLINE_VISIBILITY float       acos(float __lcpp_x) _NOEXCEPT       {return ::acosf(__lcpp_x);}
@@ -58,7 +330,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -802,8 +807,10 @@ acos(_A1 __lcpp_x) _NOEXCEPT {return ::acos((double)__lcpp_x);}
+@@ -802,8 +804,10 @@ acos(_A1 __lcpp_x) _NOEXCEPT {return ::acos((double)__lcpp_x);}
  
  #if !(defined(_AIX) || defined(__sun__))
  inline _LIBCPP_INLINE_VISIBILITY float       asin(float __lcpp_x) _NOEXCEPT       {return ::asinf(__lcpp_x);}
@@ -69,7 +341,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -814,8 +821,10 @@ asin(_A1 __lcpp_x) _NOEXCEPT {return ::asin((double)__lcpp_x);}
+@@ -814,8 +818,10 @@ asin(_A1 __lcpp_x) _NOEXCEPT {return ::asin((double)__lcpp_x);}
  
  #if !(defined(_AIX) || defined(__sun__))
  inline _LIBCPP_INLINE_VISIBILITY float       atan(float __lcpp_x) _NOEXCEPT       {return ::atanf(__lcpp_x);}
@@ -80,7 +352,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -826,8 +835,10 @@ atan(_A1 __lcpp_x) _NOEXCEPT {return ::atan((double)__lcpp_x);}
+@@ -826,8 +832,10 @@ atan(_A1 __lcpp_x) _NOEXCEPT {return ::atan((double)__lcpp_x);}
  
  #if !(defined(_AIX) || defined(__sun__))
  inline _LIBCPP_INLINE_VISIBILITY float       atan2(float __lcpp_y, float __lcpp_x) _NOEXCEPT             {return ::atan2f(__lcpp_y, __lcpp_x);}
@@ -91,7 +363,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1, class _A2>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -849,8 +860,10 @@ atan2(_A1 __lcpp_y, _A2 __lcpp_x) _NOEXCEPT
+@@ -849,8 +857,10 @@ atan2(_A1 __lcpp_y, _A2 __lcpp_x) _NOEXCEPT
  
  #if !(defined(_AIX) || defined(__sun__))
  inline _LIBCPP_INLINE_VISIBILITY float       ceil(float __lcpp_x) _NOEXCEPT       {return ::ceilf(__lcpp_x);}
@@ -102,7 +374,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -861,8 +874,10 @@ ceil(_A1 __lcpp_x) _NOEXCEPT {return ::ceil((double)__lcpp_x);}
+@@ -861,8 +871,10 @@ ceil(_A1 __lcpp_x) _NOEXCEPT {return ::ceil((double)__lcpp_x);}
  
  #if !(defined(_AIX) || defined(__sun__))
  inline _LIBCPP_INLINE_VISIBILITY float       cos(float __lcpp_x) _NOEXCEPT       {return ::cosf(__lcpp_x);}
@@ -113,7 +385,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -873,8 +888,10 @@ cos(_A1 __lcpp_x) _NOEXCEPT {return ::cos((double)__lcpp_x);}
+@@ -873,8 +885,10 @@ cos(_A1 __lcpp_x) _NOEXCEPT {return ::cos((double)__lcpp_x);}
  
  #if !(defined(_AIX) || defined(__sun__))
  inline _LIBCPP_INLINE_VISIBILITY float       cosh(float __lcpp_x) _NOEXCEPT       {return ::coshf(__lcpp_x);}
@@ -124,7 +396,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -885,8 +902,10 @@ cosh(_A1 __lcpp_x) _NOEXCEPT {return ::cosh((double)__lcpp_x);}
+@@ -885,8 +899,10 @@ cosh(_A1 __lcpp_x) _NOEXCEPT {return ::cosh((double)__lcpp_x);}
  
  #if !(defined(_AIX) || defined(__sun__))
  inline _LIBCPP_INLINE_VISIBILITY float       exp(float __lcpp_x) _NOEXCEPT       {return ::expf(__lcpp_x);}
@@ -135,7 +407,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -897,8 +916,10 @@ exp(_A1 __lcpp_x) _NOEXCEPT {return ::exp((double)__lcpp_x);}
+@@ -897,8 +913,10 @@ exp(_A1 __lcpp_x) _NOEXCEPT {return ::exp((double)__lcpp_x);}
  
  #if !(defined(_AIX) || defined(__sun__))
  inline _LIBCPP_INLINE_VISIBILITY float       fabs(float __lcpp_x) _NOEXCEPT       {return ::fabsf(__lcpp_x);}
@@ -146,7 +418,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -909,8 +930,10 @@ fabs(_A1 __lcpp_x) _NOEXCEPT {return ::fabs((double)__lcpp_x);}
+@@ -909,8 +927,10 @@ fabs(_A1 __lcpp_x) _NOEXCEPT {return ::fabs((double)__lcpp_x);}
  
  #if !(defined(_AIX) || defined(__sun__))
  inline _LIBCPP_INLINE_VISIBILITY float       floor(float __lcpp_x) _NOEXCEPT       {return ::floorf(__lcpp_x);}
@@ -157,7 +429,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -921,8 +944,10 @@ floor(_A1 __lcpp_x) _NOEXCEPT {return ::floor((double)__lcpp_x);}
+@@ -921,8 +941,10 @@ floor(_A1 __lcpp_x) _NOEXCEPT {return ::floor((double)__lcpp_x);}
  
  #if !(defined(_AIX) || defined(__sun__))
  inline _LIBCPP_INLINE_VISIBILITY float       fmod(float __lcpp_x, float __lcpp_y) _NOEXCEPT             {return ::fmodf(__lcpp_x, __lcpp_y);}
@@ -168,7 +440,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1, class _A2>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -944,8 +969,10 @@ fmod(_A1 __lcpp_x, _A2 __lcpp_y) _NOEXCEPT
+@@ -944,8 +966,10 @@ fmod(_A1 __lcpp_x, _A2 __lcpp_y) _NOEXCEPT
  
  #if !(defined(_AIX) || defined(__sun__))
  inline _LIBCPP_INLINE_VISIBILITY float       frexp(float __lcpp_x, int* __lcpp_e) _NOEXCEPT       {return ::frexpf(__lcpp_x, __lcpp_e);}
@@ -179,7 +451,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -956,8 +983,10 @@ frexp(_A1 __lcpp_x, int* __lcpp_e) _NOEXCEPT {return ::frexp((double)__lcpp_x, _
+@@ -956,8 +980,10 @@ frexp(_A1 __lcpp_x, int* __lcpp_e) _NOEXCEPT {return ::frexp((double)__lcpp_x, _
  
  #if !(defined(_AIX) || defined(__sun__))
  inline _LIBCPP_INLINE_VISIBILITY float       ldexp(float __lcpp_x, int __lcpp_e) _NOEXCEPT       {return ::ldexpf(__lcpp_x, __lcpp_e);}
@@ -190,7 +462,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -968,8 +997,10 @@ ldexp(_A1 __lcpp_x, int __lcpp_e) _NOEXCEPT {return ::ldexp((double)__lcpp_x, __
+@@ -968,8 +994,10 @@ ldexp(_A1 __lcpp_x, int __lcpp_e) _NOEXCEPT {return ::ldexp((double)__lcpp_x, __
  
  #if !(defined(_AIX) || defined(__sun__))
  inline _LIBCPP_INLINE_VISIBILITY float       log(float __lcpp_x) _NOEXCEPT       {return ::logf(__lcpp_x);}
@@ -201,7 +473,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -980,8 +1011,10 @@ log(_A1 __lcpp_x) _NOEXCEPT {return ::log((double)__lcpp_x);}
+@@ -980,8 +1008,10 @@ log(_A1 __lcpp_x) _NOEXCEPT {return ::log((double)__lcpp_x);}
  
  #if !(defined(_AIX) || defined(__sun__))
  inline _LIBCPP_INLINE_VISIBILITY float       log10(float __lcpp_x) _NOEXCEPT       {return ::log10f(__lcpp_x);}
@@ -212,7 +484,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -992,15 +1025,19 @@ log10(_A1 __lcpp_x) _NOEXCEPT {return ::log10((double)__lcpp_x);}
+@@ -992,15 +1022,19 @@ log10(_A1 __lcpp_x) _NOEXCEPT {return ::log10((double)__lcpp_x);}
  
  #if !(defined(_AIX) || defined(__sun__))
  inline _LIBCPP_INLINE_VISIBILITY float       modf(float __lcpp_x, float* __lcpp_y) _NOEXCEPT             {return ::modff(__lcpp_x, __lcpp_y);}
@@ -232,7 +504,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1, class _A2>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1022,8 +1059,10 @@ pow(_A1 __lcpp_x, _A2 __lcpp_y) _NOEXCEPT
+@@ -1022,8 +1056,10 @@ pow(_A1 __lcpp_x, _A2 __lcpp_y) _NOEXCEPT
  
  #if !(defined(_AIX) || defined(__sun__))
  inline _LIBCPP_INLINE_VISIBILITY float       sin(float __lcpp_x) _NOEXCEPT       {return ::sinf(__lcpp_x);}
@@ -243,7 +515,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1034,8 +1073,10 @@ sin(_A1 __lcpp_x) _NOEXCEPT {return ::sin((double)__lcpp_x);}
+@@ -1034,8 +1070,10 @@ sin(_A1 __lcpp_x) _NOEXCEPT {return ::sin((double)__lcpp_x);}
  
  #if !(defined(_AIX) || defined(__sun__))
  inline _LIBCPP_INLINE_VISIBILITY float       sinh(float __lcpp_x) _NOEXCEPT       {return ::sinhf(__lcpp_x);}
@@ -254,7 +526,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1046,8 +1087,10 @@ sinh(_A1 __lcpp_x) _NOEXCEPT {return ::sinh((double)__lcpp_x);}
+@@ -1046,8 +1084,10 @@ sinh(_A1 __lcpp_x) _NOEXCEPT {return ::sinh((double)__lcpp_x);}
  
  #if !(defined(_AIX) || defined(__sun__))
  inline _LIBCPP_INLINE_VISIBILITY float       sqrt(float __lcpp_x) _NOEXCEPT       {return ::sqrtf(__lcpp_x);}
@@ -265,7 +537,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1058,8 +1101,10 @@ sqrt(_A1 __lcpp_x) _NOEXCEPT {return ::sqrt((double)__lcpp_x);}
+@@ -1058,8 +1098,10 @@ sqrt(_A1 __lcpp_x) _NOEXCEPT {return ::sqrt((double)__lcpp_x);}
  
  #if !(defined(_AIX) || defined(__sun__))
  inline _LIBCPP_INLINE_VISIBILITY float       tan(float __lcpp_x) _NOEXCEPT       {return ::tanf(__lcpp_x);}
@@ -276,7 +548,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1070,8 +1115,10 @@ tan(_A1 __lcpp_x) _NOEXCEPT {return ::tan((double)__lcpp_x);}
+@@ -1070,8 +1112,10 @@ tan(_A1 __lcpp_x) _NOEXCEPT {return ::tan((double)__lcpp_x);}
  
  #if !(defined(_AIX) || defined(__sun__))
  inline _LIBCPP_INLINE_VISIBILITY float       tanh(float __lcpp_x) _NOEXCEPT       {return ::tanhf(__lcpp_x);}
@@ -287,7 +559,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1081,7 +1128,9 @@ tanh(_A1 __lcpp_x) _NOEXCEPT {return ::tanh((double)__lcpp_x);}
+@@ -1081,7 +1125,9 @@ tanh(_A1 __lcpp_x) _NOEXCEPT {return ::tanh((double)__lcpp_x);}
  // acosh
  
  inline _LIBCPP_INLINE_VISIBILITY float       acosh(float __lcpp_x) _NOEXCEPT       {return ::acoshf(__lcpp_x);}
@@ -297,7 +569,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1091,7 +1140,9 @@ acosh(_A1 __lcpp_x) _NOEXCEPT {return ::acosh((double)__lcpp_x);}
+@@ -1091,7 +1137,9 @@ acosh(_A1 __lcpp_x) _NOEXCEPT {return ::acosh((double)__lcpp_x);}
  // asinh
  
  inline _LIBCPP_INLINE_VISIBILITY float       asinh(float __lcpp_x) _NOEXCEPT       {return ::asinhf(__lcpp_x);}
@@ -307,7 +579,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1101,7 +1152,10 @@ asinh(_A1 __lcpp_x) _NOEXCEPT {return ::asinh((double)__lcpp_x);}
+@@ -1101,7 +1149,10 @@ asinh(_A1 __lcpp_x) _NOEXCEPT {return ::asinh((double)__lcpp_x);}
  // atanh
  
  inline _LIBCPP_INLINE_VISIBILITY float       atanh(float __lcpp_x) _NOEXCEPT       {return ::atanhf(__lcpp_x);}
@@ -318,7 +590,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1111,7 +1165,9 @@ atanh(_A1 __lcpp_x) _NOEXCEPT {return ::atanh((double)__lcpp_x);}
+@@ -1111,7 +1162,9 @@ atanh(_A1 __lcpp_x) _NOEXCEPT {return ::atanh((double)__lcpp_x);}
  // cbrt
  
  inline _LIBCPP_INLINE_VISIBILITY float       cbrt(float __lcpp_x) _NOEXCEPT       {return ::cbrtf(__lcpp_x);}
@@ -328,7 +600,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1142,6 +1198,7 @@ inline _LIBCPP_INLINE_VISIBILITY double __libcpp_copysign(double __lcpp_x, doubl
+@@ -1142,6 +1195,7 @@ inline _LIBCPP_INLINE_VISIBILITY double __libcpp_copysign(double __lcpp_x, doubl
  #endif
  }
  
@@ -336,7 +608,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  #if __has_builtin(__builtin_copysignl)
  _LIBCPP_CONSTEXPR
  #endif
-@@ -1152,6 +1209,7 @@ inline _LIBCPP_INLINE_VISIBILITY long double __libcpp_copysign(long double __lcp
+@@ -1152,6 +1206,7 @@ inline _LIBCPP_INLINE_VISIBILITY long double __libcpp_copysign(long double __lcp
    return ::copysignl(__lcpp_x, __lcpp_y);
  #endif
  }
@@ -344,7 +616,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1, class _A2>
  #if __has_builtin(__builtin_copysign)
-@@ -1179,9 +1237,11 @@ inline _LIBCPP_INLINE_VISIBILITY float copysign(float __lcpp_x, float __lcpp_y)
+@@ -1179,9 +1234,11 @@ inline _LIBCPP_INLINE_VISIBILITY float copysign(float __lcpp_x, float __lcpp_y)
    return ::__libcpp_copysign(__lcpp_x, __lcpp_y);
  }
  
@@ -356,7 +628,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1, class _A2>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1198,7 +1258,9 @@ typename std::__enable_if_t
+@@ -1198,7 +1255,9 @@ typename std::__enable_if_t
  // erf
  
  inline _LIBCPP_INLINE_VISIBILITY float       erf(float __lcpp_x) _NOEXCEPT       {return ::erff(__lcpp_x);}
@@ -366,7 +638,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1208,7 +1270,9 @@ erf(_A1 __lcpp_x) _NOEXCEPT {return ::erf((double)__lcpp_x);}
+@@ -1208,7 +1267,9 @@ erf(_A1 __lcpp_x) _NOEXCEPT {return ::erf((double)__lcpp_x);}
  // erfc
  
  inline _LIBCPP_INLINE_VISIBILITY float       erfc(float __lcpp_x) _NOEXCEPT       {return ::erfcf(__lcpp_x);}
@@ -376,7 +648,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1218,7 +1282,9 @@ erfc(_A1 __lcpp_x) _NOEXCEPT {return ::erfc((double)__lcpp_x);}
+@@ -1218,7 +1279,9 @@ erfc(_A1 __lcpp_x) _NOEXCEPT {return ::erfc((double)__lcpp_x);}
  // exp2
  
  inline _LIBCPP_INLINE_VISIBILITY float       exp2(float __lcpp_x) _NOEXCEPT       {return ::exp2f(__lcpp_x);}
@@ -386,7 +658,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1228,7 +1294,9 @@ exp2(_A1 __lcpp_x) _NOEXCEPT {return ::exp2((double)__lcpp_x);}
+@@ -1228,7 +1291,9 @@ exp2(_A1 __lcpp_x) _NOEXCEPT {return ::exp2((double)__lcpp_x);}
  // expm1
  
  inline _LIBCPP_INLINE_VISIBILITY float       expm1(float __lcpp_x) _NOEXCEPT       {return ::expm1f(__lcpp_x);}
@@ -396,7 +668,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1238,7 +1306,9 @@ expm1(_A1 __lcpp_x) _NOEXCEPT {return ::expm1((double)__lcpp_x);}
+@@ -1238,7 +1303,9 @@ expm1(_A1 __lcpp_x) _NOEXCEPT {return ::expm1((double)__lcpp_x);}
  // fdim
  
  inline _LIBCPP_INLINE_VISIBILITY float       fdim(float __lcpp_x, float __lcpp_y) _NOEXCEPT             {return ::fdimf(__lcpp_x, __lcpp_y);}
@@ -406,7 +678,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1, class _A2>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1266,6 +1336,7 @@ inline _LIBCPP_INLINE_VISIBILITY float       fma(float __lcpp_x, float __lcpp_y,
+@@ -1266,6 +1333,7 @@ inline _LIBCPP_INLINE_VISIBILITY float       fma(float __lcpp_x, float __lcpp_y,
      return ::fmaf(__lcpp_x, __lcpp_y, __lcpp_z);
  #endif
  }
@@ -414,7 +686,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  inline _LIBCPP_INLINE_VISIBILITY long double fma(long double __lcpp_x, long double __lcpp_y, long double __lcpp_z) _NOEXCEPT
  {
  #if __has_builtin(__builtin_fmal)
-@@ -1274,6 +1345,7 @@ inline _LIBCPP_INLINE_VISIBILITY long double fma(long double __lcpp_x, long doub
+@@ -1274,6 +1342,7 @@ inline _LIBCPP_INLINE_VISIBILITY long double fma(long double __lcpp_x, long doub
      return ::fmal(__lcpp_x, __lcpp_y, __lcpp_z);
  #endif
  }
@@ -422,7 +694,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1, class _A2, class _A3>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1300,7 +1372,9 @@ fma(_A1 __lcpp_x, _A2 __lcpp_y, _A3 __lcpp_z) _NOEXCEPT
+@@ -1300,7 +1369,9 @@ fma(_A1 __lcpp_x, _A2 __lcpp_y, _A3 __lcpp_z) _NOEXCEPT
  // fmax
  
  inline _LIBCPP_INLINE_VISIBILITY float       fmax(float __lcpp_x, float __lcpp_y) _NOEXCEPT             {return ::fmaxf(__lcpp_x, __lcpp_y);}
@@ -432,7 +704,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1, class _A2>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1321,7 +1395,9 @@ fmax(_A1 __lcpp_x, _A2 __lcpp_y) _NOEXCEPT
+@@ -1321,7 +1392,9 @@ fmax(_A1 __lcpp_x, _A2 __lcpp_y) _NOEXCEPT
  // fmin
  
  inline _LIBCPP_INLINE_VISIBILITY float       fmin(float __lcpp_x, float __lcpp_y) _NOEXCEPT             {return ::fminf(__lcpp_x, __lcpp_y);}
@@ -442,7 +714,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1, class _A2>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1342,7 +1418,9 @@ fmin(_A1 __lcpp_x, _A2 __lcpp_y) _NOEXCEPT
+@@ -1342,7 +1415,9 @@ fmin(_A1 __lcpp_x, _A2 __lcpp_y) _NOEXCEPT
  // hypot
  
  inline _LIBCPP_INLINE_VISIBILITY float       hypot(float __lcpp_x, float __lcpp_y) _NOEXCEPT             {return ::hypotf(__lcpp_x, __lcpp_y);}
@@ -452,7 +724,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1, class _A2>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1363,7 +1441,9 @@ hypot(_A1 __lcpp_x, _A2 __lcpp_y) _NOEXCEPT
+@@ -1363,7 +1438,9 @@ hypot(_A1 __lcpp_x, _A2 __lcpp_y) _NOEXCEPT
  // ilogb
  
  inline _LIBCPP_INLINE_VISIBILITY int ilogb(float __lcpp_x) _NOEXCEPT       {return ::ilogbf(__lcpp_x);}
@@ -462,7 +734,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1373,7 +1453,9 @@ ilogb(_A1 __lcpp_x) _NOEXCEPT {return ::ilogb((double)__lcpp_x);}
+@@ -1373,7 +1450,9 @@ ilogb(_A1 __lcpp_x) _NOEXCEPT {return ::ilogb((double)__lcpp_x);}
  // lgamma
  
  inline _LIBCPP_INLINE_VISIBILITY float       lgamma(float __lcpp_x) _NOEXCEPT       {return ::lgammaf(__lcpp_x);}
@@ -472,7 +744,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1390,6 +1472,7 @@ inline _LIBCPP_INLINE_VISIBILITY long long llrint(float __lcpp_x) _NOEXCEPT
+@@ -1390,6 +1469,7 @@ inline _LIBCPP_INLINE_VISIBILITY long long llrint(float __lcpp_x) _NOEXCEPT
      return ::llrintf(__lcpp_x);
  #endif
  }
@@ -480,7 +752,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  inline _LIBCPP_INLINE_VISIBILITY long long llrint(long double __lcpp_x) _NOEXCEPT
  {
  #if __has_builtin(__builtin_llrintl)
-@@ -1398,6 +1481,7 @@ inline _LIBCPP_INLINE_VISIBILITY long long llrint(long double __lcpp_x) _NOEXCEP
+@@ -1398,6 +1478,7 @@ inline _LIBCPP_INLINE_VISIBILITY long long llrint(long double __lcpp_x) _NOEXCEP
      return ::llrintl(__lcpp_x);
  #endif
  }
@@ -488,7 +760,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1421,6 +1505,7 @@ inline _LIBCPP_INLINE_VISIBILITY long long llround(float __lcpp_x) _NOEXCEPT
+@@ -1421,6 +1502,7 @@ inline _LIBCPP_INLINE_VISIBILITY long long llround(float __lcpp_x) _NOEXCEPT
      return ::llroundf(__lcpp_x);
  #endif
  }
@@ -496,7 +768,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  inline _LIBCPP_INLINE_VISIBILITY long long llround(long double __lcpp_x) _NOEXCEPT
  {
  #if __has_builtin(__builtin_llroundl)
-@@ -1429,6 +1514,7 @@ inline _LIBCPP_INLINE_VISIBILITY long long llround(long double __lcpp_x) _NOEXCE
+@@ -1429,6 +1511,7 @@ inline _LIBCPP_INLINE_VISIBILITY long long llround(long double __lcpp_x) _NOEXCE
      return ::llroundl(__lcpp_x);
  #endif
  }
@@ -504,7 +776,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1445,7 +1531,9 @@ llround(_A1 __lcpp_x) _NOEXCEPT
+@@ -1445,7 +1528,9 @@ llround(_A1 __lcpp_x) _NOEXCEPT
  // log1p
  
  inline _LIBCPP_INLINE_VISIBILITY float       log1p(float __lcpp_x) _NOEXCEPT       {return ::log1pf(__lcpp_x);}
@@ -514,7 +786,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1455,7 +1543,9 @@ log1p(_A1 __lcpp_x) _NOEXCEPT {return ::log1p((double)__lcpp_x);}
+@@ -1455,7 +1540,9 @@ log1p(_A1 __lcpp_x) _NOEXCEPT {return ::log1p((double)__lcpp_x);}
  // log2
  
  inline _LIBCPP_INLINE_VISIBILITY float       log2(float __lcpp_x) _NOEXCEPT       {return ::log2f(__lcpp_x);}
@@ -524,7 +796,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1465,7 +1555,9 @@ log2(_A1 __lcpp_x) _NOEXCEPT {return ::log2((double)__lcpp_x);}
+@@ -1465,7 +1552,9 @@ log2(_A1 __lcpp_x) _NOEXCEPT {return ::log2((double)__lcpp_x);}
  // logb
  
  inline _LIBCPP_INLINE_VISIBILITY float       logb(float __lcpp_x) _NOEXCEPT       {return ::logbf(__lcpp_x);}
@@ -534,7 +806,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1539,7 +1631,9 @@ lround(_A1 __lcpp_x) _NOEXCEPT
+@@ -1539,7 +1628,9 @@ lround(_A1 __lcpp_x) _NOEXCEPT
  // nearbyint
  
  inline _LIBCPP_INLINE_VISIBILITY float       nearbyint(float __lcpp_x) _NOEXCEPT       {return ::nearbyintf(__lcpp_x);}
@@ -544,7 +816,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1549,7 +1643,9 @@ nearbyint(_A1 __lcpp_x) _NOEXCEPT {return ::nearbyint((double)__lcpp_x);}
+@@ -1549,7 +1640,9 @@ nearbyint(_A1 __lcpp_x) _NOEXCEPT {return ::nearbyint((double)__lcpp_x);}
  // nextafter
  
  inline _LIBCPP_INLINE_VISIBILITY float       nextafter(float __lcpp_x, float __lcpp_y) _NOEXCEPT             {return ::nextafterf(__lcpp_x, __lcpp_y);}
@@ -554,7 +826,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1, class _A2>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1569,6 +1665,7 @@ nextafter(_A1 __lcpp_x, _A2 __lcpp_y) _NOEXCEPT
+@@ -1569,6 +1662,7 @@ nextafter(_A1 __lcpp_x, _A2 __lcpp_y) _NOEXCEPT
  
  // nexttoward
  
@@ -562,7 +834,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  inline _LIBCPP_INLINE_VISIBILITY float       nexttoward(float __lcpp_x, long double __lcpp_y) _NOEXCEPT       {return ::nexttowardf(__lcpp_x, __lcpp_y);}
  inline _LIBCPP_INLINE_VISIBILITY long double nexttoward(long double __lcpp_x, long double __lcpp_y) _NOEXCEPT {return ::nexttowardl(__lcpp_x, __lcpp_y);}
  
-@@ -1576,11 +1673,14 @@ template <class _A1>
+@@ -1576,11 +1670,14 @@ template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
  typename std::enable_if<std::is_integral<_A1>::value, double>::type
  nexttoward(_A1 __lcpp_x, long double __lcpp_y) _NOEXCEPT {return ::nexttoward((double)__lcpp_x, __lcpp_y);}
@@ -577,7 +849,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1, class _A2>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1601,7 +1701,9 @@ remainder(_A1 __lcpp_x, _A2 __lcpp_y) _NOEXCEPT
+@@ -1601,7 +1698,9 @@ remainder(_A1 __lcpp_x, _A2 __lcpp_y) _NOEXCEPT
  // remquo
  
  inline _LIBCPP_INLINE_VISIBILITY float       remquo(float __lcpp_x, float __lcpp_y, int* __lcpp_z) _NOEXCEPT             {return ::remquof(__lcpp_x, __lcpp_y, __lcpp_z);}
@@ -587,7 +859,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1, class _A2>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1684,7 +1786,9 @@ round(_A1 __lcpp_x) _NOEXCEPT
+@@ -1684,7 +1783,9 @@ round(_A1 __lcpp_x) _NOEXCEPT
  // scalbln
  
  inline _LIBCPP_INLINE_VISIBILITY float       scalbln(float __lcpp_x, long __lcpp_y) _NOEXCEPT       {return ::scalblnf(__lcpp_x, __lcpp_y);}
@@ -597,7 +869,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1694,7 +1798,9 @@ scalbln(_A1 __lcpp_x, long __lcpp_y) _NOEXCEPT {return ::scalbln((double)__lcpp_
+@@ -1694,7 +1795,9 @@ scalbln(_A1 __lcpp_x, long __lcpp_y) _NOEXCEPT {return ::scalbln((double)__lcpp_
  // scalbn
  
  inline _LIBCPP_INLINE_VISIBILITY float       scalbn(float __lcpp_x, int __lcpp_y) _NOEXCEPT       {return ::scalbnf(__lcpp_x, __lcpp_y);}
@@ -607,7 +879,7 @@ index 8cbbc54a623f..e65592e076a8 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
-@@ -1704,7 +1810,9 @@ scalbn(_A1 __lcpp_x, int __lcpp_y) _NOEXCEPT {return ::scalbn((double)__lcpp_x,
+@@ -1704,7 +1807,9 @@ scalbn(_A1 __lcpp_x, int __lcpp_y) _NOEXCEPT {return ::scalbn((double)__lcpp_x,
  // tgamma
  
  inline _LIBCPP_INLINE_VISIBILITY float       tgamma(float __lcpp_x) _NOEXCEPT       {return ::tgammaf(__lcpp_x);}
@@ -624,26 +896,16 @@ index f469d3c232e6..706eb7759200 100644
 @@ -13,6 +13,7 @@
  #ifndef LIBUNWIND_CONFIG_H
  #define LIBUNWIND_CONFIG_H
-
+ 
 +#include <alloca.h>
  #include <assert.h>
  #include <stdio.h>
  #include <stdint.h>
 diff --git a/llvm/lib/Support/CommandLine.cpp b/llvm/lib/Support/CommandLine.cpp
-index e64934aa90cc..baa10ad66bc0 100644
+index 4153a69abf5d..789e6fd1e129 100644
 --- a/llvm/lib/Support/CommandLine.cpp
 +++ b/llvm/lib/Support/CommandLine.cpp
-@@ -15,6 +15,9 @@
- //
- //===----------------------------------------------------------------------===//
- 
-+// Modifications copyright (C) 2021 Arm Limited (or its affiliates).
-+// All rights reserved.
-+
- #include "llvm/Support/CommandLine.h"
- 
- #include "DebugOptions.h"
-@@ -1112,12 +1115,57 @@ static llvm::Error ExpandResponseFile(
+@@ -1112,12 +1112,57 @@ static llvm::Error ExpandResponseFile(
    if (!RelativeNames)
      return Error::success();
    llvm::StringRef BasePath = llvm::sys::path::parent_path(FName);
@@ -705,71 +967,3 @@ index e64934aa90cc..baa10ad66bc0 100644
        continue;
  
      StringRef FileName(Arg + 1);
-diff --git a/clang/lib/Basic/Targets/AArch64.cpp b/clang/lib/Basic/Targets/AArch64.cpp
-index 4089a393b762..81e0d642d527 100644
---- a/clang/lib/Basic/Targets/AArch64.cpp
-+++ b/clang/lib/Basic/Targets/AArch64.cpp
-@@ -247,8 +247,13 @@ void AArch64TargetInfo::getTargetDefines(const LangOptions &Opts,
-   Builder.defineMacro("__aarch64__");
-   // For bare-metal.
-   if (getTriple().getOS() == llvm::Triple::UnknownOS &&
--      getTriple().isOSBinFormatELF())
--    Builder.defineMacro("__ELF__");
-+      getTriple().isOSBinFormatELF()) {
-+      Builder.defineMacro("__ELF__");
-+      // embedded arm toolchain hack
-+      // Required by the libc++ locale support.
-+      if (Opts.CPlusPlus)
-+        Builder.defineMacro("_GNU_SOURCE");
-+  }
-
-   // Target properties.
-   if (!getTriple().isOSWindows() && getTriple().isArch64Bit()) {
-diff --git a/clang/lib/Driver/ToolChains/BareMetal.cpp b/clang/lib/Driver/ToolChains/BareMetal.cpp
-index cd07692be358..7280be85669c 100644
---- a/clang/lib/Driver/ToolChains/BareMetal.cpp
-+++ b/clang/lib/Driver/ToolChains/BareMetal.cpp
-@@ -301,6 +301,8 @@ void BareMetal::AddLinkRuntimeLib(const ArgList &Args,
-   llvm_unreachable("Unhandled RuntimeLibType.");
- }
-
-+bool BareMetal::HasNativeLLVMSupport() const { return true; }
-+
- void baremetal::Linker::ConstructJob(Compilation &C, const JobAction &JA,
-                                      const InputInfo &Output,
-                                      const InputInfoList &Inputs,
-diff --git a/clang/lib/Driver/ToolChains/BareMetal.h b/clang/lib/Driver/ToolChains/BareMetal.h
-index dc718e09ad43..ce3df5a983a8 100644
---- a/clang/lib/Driver/ToolChains/BareMetal.h
-+++ b/clang/lib/Driver/ToolChains/BareMetal.h
-@@ -75,6 +75,8 @@ public:
-   void AddLinkRuntimeLib(const llvm::opt::ArgList &Args,
-                          llvm::opt::ArgStringList &CmdArgs) const;
-   std::string computeSysRoot() const override;
-+
-+  bool HasNativeLLVMSupport() const override;
- };
-
- } // namespace toolchains
-diff --git a/compiler-rt/cmake/Modules/AddCompilerRT.cmake b/compiler-rt/cmake/Modules/AddCompilerRT.cmake
-index b69833cbcc09..569aa146b6e9 100644
---- a/compiler-rt/cmake/Modules/AddCompilerRT.cmake
-+++ b/compiler-rt/cmake/Modules/AddCompilerRT.cmake
-@@ -227,7 +227,7 @@ function(add_compiler_rt_runtime name type)
-       list_intersect(LIB_ARCHS_${libname} DARWIN_${os}_ARCHS LIB_ARCHS)
-       if(LIB_ARCHS_${libname})
-         list(APPEND libnames ${libname})
--        set(extra_cflags_${libname} ${DARWIN_${os}_CFLAGS} ${NO_LTO_FLAGS} ${NO_PGO_FLAGS} ${LIB_CFLAGS})
-+        set(extra_cflags_${libname} ${DARWIN_${os}_CFLAGS} ${NO_PGO_FLAGS} ${LIB_CFLAGS})
-         set(output_name_${libname} ${libname}${COMPILER_RT_OS_SUFFIX})
-         set(sources_${libname} ${LIB_SOURCES})
-         format_object_libs(sources_${libname} ${os} ${LIB_OBJECT_LIBS})
-@@ -268,7 +268,7 @@ function(add_compiler_rt_runtime name type)
-       set(sources_${libname} ${LIB_SOURCES})
-       format_object_libs(sources_${libname} ${arch} ${LIB_OBJECT_LIBS})
-       set(libnames ${libnames} ${libname})
--      set(extra_cflags_${libname} ${TARGET_${arch}_CFLAGS} ${NO_LTO_FLAGS} ${NO_PGO_FLAGS} ${LIB_CFLAGS})
-+      set(extra_cflags_${libname} ${TARGET_${arch}_CFLAGS} ${NO_PGO_FLAGS} ${LIB_CFLAGS})
-       get_compiler_rt_output_dir(${arch} output_dir_${libname})
-       get_compiler_rt_install_dir(${arch} install_dir_${libname})
-     endforeach()
