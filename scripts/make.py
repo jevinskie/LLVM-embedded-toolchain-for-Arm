@@ -276,7 +276,7 @@ class ToolchainBuild:
         cfg = self.cfg
         join = os.path.join
         flags = (lib_spec.flags
-                 + ' -ffunction-sections -fdata-sections -fno-ident'
+                 + ' -ffunction-sections -fdata-sections -fno-ident -flto=full'
                  + ' --sysroot {}'.format(join(cfg.target_llvm_rt_dir,
                                                lib_spec.name)))
         defs = {
