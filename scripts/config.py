@@ -294,7 +294,7 @@ class Config:  # pylint: disable=too-many-instance-attributes
     def _configure_actions(self, args: argparse.Namespace):
         if not args.actions or Action.ALL.value in args.actions:
             # Actions that are not part of the "ALL" action:
-            exclude_from_all = [Action.ALL, Action.TEST, Action.PACKAGE_SRC]
+            exclude_from_all = [Action.ALL, Action.TEST, Action.PACKAGE_SRC, Action.PACKAGE]
             if self.is_source_package:
                 exclude_from_all.append(Action.PREPARE)
             self.actions = set(action for action in Action

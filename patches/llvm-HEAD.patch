@@ -725,3 +725,29 @@ index 4089a393b762..81e0d642d527 100644
 
    // Target properties.
    if (!getTriple().isOSWindows() && getTriple().isArch64Bit()) {
+diff --git a/clang/lib/Driver/ToolChains/BareMetal.cpp b/clang/lib/Driver/ToolChains/BareMetal.cpp
+index cd07692be358..7280be85669c 100644
+--- a/clang/lib/Driver/ToolChains/BareMetal.cpp
++++ b/clang/lib/Driver/ToolChains/BareMetal.cpp
+@@ -301,6 +301,8 @@ void BareMetal::AddLinkRuntimeLib(const ArgList &Args,
+   llvm_unreachable("Unhandled RuntimeLibType.");
+ }
+
++bool BareMetal::HasNativeLLVMSupport() const { return true; }
++
+ void baremetal::Linker::ConstructJob(Compilation &C, const JobAction &JA,
+                                      const InputInfo &Output,
+                                      const InputInfoList &Inputs,
+diff --git a/clang/lib/Driver/ToolChains/BareMetal.h b/clang/lib/Driver/ToolChains/BareMetal.h
+index dc718e09ad43..ce3df5a983a8 100644
+--- a/clang/lib/Driver/ToolChains/BareMetal.h
++++ b/clang/lib/Driver/ToolChains/BareMetal.h
+@@ -75,6 +75,8 @@ public:
+   void AddLinkRuntimeLib(const llvm::opt::ArgList &Args,
+                          llvm::opt::ArgStringList &CmdArgs) const;
+   std::string computeSysRoot() const override;
++
++  bool HasNativeLLVMSupport() const override;
+ };
+
+ } // namespace toolchains

@@ -85,6 +85,17 @@ def write_cfg_files(cfg: config.Config, lib_spec: config.LibrarySpec) -> None:
         util.write_lines(lines, file_path)
 
 
+def symlink_to_triple(cfg: config.Config, lib_spec: config.LibrarySpec) -> None:
+    """Symlink variant to triple (aarch64_ hack)"""
+    raise NotImplementedError
+    ld_name = _get_base_ld_name(lib_spec)
+    base_ld_src = os.path.join(cfg.source_dir, 'ldscript', ld_name)
+    base_ld_dest = os.path.join(cfg.target_llvm_rt_dir, lib_spec.name,
+                                ld_name)
+    if cfg.verbose:
+        logging.info('Copying %s to %s', base_ld_src, base_ld_dest)
+    os.symlink(base_ld_src, base_ld_dest)
+
 def configure_target(cfg: config.Config, lib_spec: config.LibrarySpec) -> None:
     """Create linker script and configuration files for a single library
        variant."""
