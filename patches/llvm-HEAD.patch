@@ -889,6 +889,19 @@ index 850cdcfb32f6..8f15d3406861 100644
  
  template <class _A1>
  inline _LIBCPP_INLINE_VISIBILITY
+diff --git a/libcxx/include/new b/libcxx/include/new
+index be0d972f42da..8099bd51a5b7 100644
+--- a/libcxx/include/new
++++ b/libcxx/include/new
+@@ -322,6 +322,8 @@ inline _LIBCPP_INLINE_VISIBILITY
+ void* __libcpp_aligned_alloc(std::size_t __alignment, std::size_t __size) {
+ #if defined(_LIBCPP_MSVCRT_LIKE)
+   return ::_aligned_malloc(__size, __alignment);
++#elif defined(__NEWLIB__) && __ISO_C_VISIBLE >= 2011
++  return ::aligned_alloc(__alignment, __size);
+ #else
+   void* __result = nullptr;
+   (void)::posix_memalign(&__result, __alignment, __size);
 diff --git a/libunwind/src/config.h b/libunwind/src/config.h
 index f469d3c232e6..706eb7759200 100644
 --- a/libunwind/src/config.h
