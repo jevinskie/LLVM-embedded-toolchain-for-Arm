@@ -376,8 +376,11 @@ class ToolchainBuild:
         # Disable C++17 aligned allocation feature because its implementation
         # in libc++ relies on posix_memalign() which is not available in our
         # newlib build
+        #
+        # jevinskie: no longer the case.
+        # patched libcxx to use memalign which is available in newlib and u-boot.
         cxx_flags = (cmake_common_defs.get('CMAKE_CXX_FLAGS', '')
-                     + ' -D_LIBCPP_HAS_NO_LIBRARY_ALIGNED_ALLOCATION')
+                     + '')
         install_dir = os.path.join(self.cfg.target_llvm_rt_dir,
                                    lib_spec.name)
         cmake_common_defs.update({
