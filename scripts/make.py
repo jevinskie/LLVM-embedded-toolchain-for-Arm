@@ -564,6 +564,7 @@ class ToolchainBuild:
             '--enable-newlib-io-c99-formats',
             '--disable-nls',
             '--enable-lite-exit',
+            '--enable-newlib-multithread=no',
         ]
         make_args = [
             'make',
