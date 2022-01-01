@@ -392,13 +392,13 @@ class ToolchainBuild:
         cmake_libcxxabi_defs = {
             'LIBCXXABI_ENABLE_SHARED:BOOL': 'OFF',
             'LIBCXXABI_ENABLE_STATIC:BOOL': 'ON',
-            'LIBCXXABI_ENABLE_EXCEPTIONS:BOOL': 'ON',
+            'LIBCXXABI_ENABLE_EXCEPTIONS:BOOL': 'OFF',
             'LIBCXXABI_ENABLE_ASSERTIONS:BOOL': 'OFF',
             'LIBCXXABI_ENABLE_PIC:BOOL': 'OFF',
             'LIBCXXABI_USE_COMPILER_RT:BOOL': 'ON',
             'LIBCXXABI_ENABLE_THREADS:BOOL': 'OFF',
             'LIBCXXABI_BAREMETAL:BOOL': 'ON',
-            'LIBCXXABI_USE_LLVM_UNWINDER': 'ON',
+            'LIBCXXABI_USE_LLVM_UNWINDER': 'OFF',
             'LIBCXXABI_LIBCXX_INCLUDES:PATH':
                 os.path.join(install_dir, 'include', 'c++', 'v1'),
         }
@@ -416,8 +416,8 @@ class ToolchainBuild:
             'LIBCXX_ENABLE_DEBUG_MODE_SUPPORT:BOOL': 'OFF',
             'LIBCXX_ENABLE_RANDOM_DEVICE:BOOL': 'OFF',
             'LIBCXX_ENABLE_LOCALIZATION:BOOL': 'ON',
-            'LIBCXX_ENABLE_EXCEPTIONS:BOOL': 'ON',
-            'LIBCXX_ENABLE_RTTI:BOOL': 'ON',
+            'LIBCXX_ENABLE_EXCEPTIONS:BOOL': 'OFF',
+            'LIBCXX_ENABLE_RTTI:BOOL': 'OFF',
             'LIBCXX_ENABLE_THREADS:BOOL': 'OFF',
             'LIBCXX_ENABLE_MONOTONIC_CLOCK:BOOL': 'OFF',
             'LIBCXX_INCLUDE_BENCHMARKS:BOOL': 'OFF',
