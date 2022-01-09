@@ -276,7 +276,7 @@ class ToolchainBuild:
         cfg = self.cfg
         join = os.path.join
         flags = (lib_spec.flags
-                 + ' -D_POSIX_C_SOURCE -ffunction-sections -fdata-sections -fno-ident -flto=full'
+                 + ' -D_POSIX_C_SOURCE -ffunction-sections -fdata-sections -fno-ident '
                  + ' --sysroot {}'.format(join(cfg.target_llvm_rt_dir,
                                                lib_spec.name)))
         defs = {
@@ -387,6 +387,7 @@ class ToolchainBuild:
             'CMAKE_BUILD_TYPE:STRING': 'MinSizeRel',
             'CMAKE_CXX_FLAGS': cxx_flags,
             'CMAKE_INSTALL_PREFIX': install_dir,
+            # 'CMAKE_SIZEOF_VOID_P:STRING': '8',
         })
 
         cmake_libcxxabi_defs = {
@@ -565,6 +566,9 @@ class ToolchainBuild:
             '--disable-nls',
             '--enable-lite-exit',
             '--enable-newlib-multithread=no',
+            # '--enable-newlib-mb',
+            # '--enable-newlib-iconv',
+            # '--enable-newlib-iconv-encodings=ascii,utf8',
         ]
         make_args = [
             'make',
