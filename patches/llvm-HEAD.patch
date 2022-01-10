@@ -47,7 +47,7 @@ index b69833cbcc09..569aa146b6e9 100644
        get_compiler_rt_install_dir(${arch} install_dir_${libname})
      endforeach()
 diff --git a/libcxx/CMakeLists.txt b/libcxx/CMakeLists.txt
-index 03a6a0781b5a..76d6f0f33024 100644
+index 03a6a0781b5a..e62eb7ba38a5 100644
 --- a/libcxx/CMakeLists.txt
 +++ b/libcxx/CMakeLists.txt
 @@ -108,6 +108,8 @@ option(LIBCXX_ENABLE_LOCALIZATION
@@ -63,7 +63,7 @@ index 03a6a0781b5a..76d6f0f33024 100644
  config_define_if_not(LIBCXX_ENABLE_FILESYSTEM _LIBCPP_HAS_NO_FILESYSTEM_LIBRARY)
  config_define_if_not(LIBCXX_ENABLE_RANDOM_DEVICE _LIBCPP_HAS_NO_RANDOM_DEVICE)
  config_define_if_not(LIBCXX_ENABLE_LOCALIZATION _LIBCPP_HAS_NO_LOCALIZATION)
-+config_define(LIBCXX_ENABLE_LOCALIZATION_STUBS _LIBCPP_HAS_LOCALIZATION_STUBS)
++config_define_if(LIBCXX_ENABLE_LOCALIZATION_STUBS _LIBCPP_HAS_LOCALIZATION_STUBS)
  config_define_if_not(LIBCXX_ENABLE_UNICODE _LIBCPP_HAS_NO_UNICODE)
  config_define_if_not(LIBCXX_ENABLE_WIDE_CHARACTERS _LIBCPP_HAS_NO_WIDE_CHARACTERS)
  config_define_if_not(LIBCXX_ENABLE_VENDOR_AVAILABILITY_ANNOTATIONS _LIBCPP_HAS_NO_VENDOR_AVAILABILITY_ANNOTATIONS)
@@ -107,50 +107,6 @@ index 59ca22981242..bc1a6466b418 100644
  #cmakedefine _LIBCPP_HAS_NO_WIDE_CHARACTERS
  #cmakedefine _LIBCPP_HAS_NO_INCOMPLETE_FORMAT
  #cmakedefine _LIBCPP_HAS_NO_INCOMPLETE_RANGES
-diff --git a/libcxx/include/__locale b/libcxx/include/__locale
-index 2582a90bb578..5dd2f2ad30ca 100644
---- a/libcxx/include/__locale
-+++ b/libcxx/include/__locale
-@@ -17,8 +17,39 @@
- #include <utility>
- #include <mutex>
- #include <cstdint>
-+
-+// for isascii on newlib
-+#if defined(_NEWLIB_VERSION) && !__XSI_VISIBLE
-+#   undef __XSI_VISIBLE
-+#   define __XSI_VISIBLE 1
-+#   define _LIBCPP_LOCALE_SHOULD_UNDEF_XSI_VISIBLE
-+#endif
-+
- #include <cctype>
-+
-+#ifdef _LIBCPP_LOCALE_SHOULD_UNDEF_XSI_VISIBLE
-+#   undef __XSI_VISIBLE
-+#   define __XSI_VISIBLE 0
-+#   undef _LIBCPP_LOCALE_SHOULD_UNDEF_XSI_VISIBLE
-+#endif
-+
-+// don't get a few of newlib's locale definitons
-+#if defined(_NEWLIB_VERSION) && __POSIX_VISIBLE >= 200809
-+#   define _LIBCPP_LOCALE_SHOULD_UNDEF_POSIX_VISIBLE_ORIG_DEF __POSIX_VISIBLE
-+#   undef __POSIX_VISIBLE
-+#   define __POSIX_VISIBLE 200112
-+#   define _LIBCPP_LOCALE_SHOULD_UNDEF_POSIX_VISIBLE
-+#endif
-+
- #include <locale.h>
-+
-+#ifdef _LIBCPP_LOCALE_SHOULD_UNDEF_POSIX_VISIBLE
-+#   undef __POSIX_VISIBLE
-+#   define __POSIX_VISIBLE _LIBCPP_LOCALE_SHOULD_UNDEF_POSIX_VISIBLE_ORIG_DEF
-+#   undef _LIBCPP_LOCALE_SHOULD_UNDEF_POSIX_VISIBLE_ORIG_DEF
-+#   undef _LIBCPP_LOCALE_SHOULD_UNDEF_POSIX_VISIBLE
-+#endif
-+
- #if defined(_LIBCPP_MSVCRT_LIKE)
- # include <cstring>
- # include <__support/win32/locale_win32.h>
 diff --git a/libcxx/include/__mbstate_t.h b/libcxx/include/__mbstate_t.h
 index 3489f9cc0e3a..fb7908387c56 100644
 --- a/libcxx/include/__mbstate_t.h
@@ -166,10 +122,10 @@ index 3489f9cc0e3a..fb7908387c56 100644
  #   error "The library was configured without support for wide-characters, but we don't know how to get the definition of mbstate_t without <wchar.h> on your platform."
  #endif
 diff --git a/libcxx/include/__support/newlib/xlocale.h b/libcxx/include/__support/newlib/xlocale.h
-index b75f9263a4c4..fdf38b9a4b19 100644
+index b75f9263a4c4..b207bb79f7dd 100644
 --- a/libcxx/include/__support/newlib/xlocale.h
 +++ b/libcxx/include/__support/newlib/xlocale.h
-@@ -13,10 +13,13 @@
+@@ -13,10 +13,14 @@
  
  #include <cstdlib>
  #include <clocale>
@@ -179,9 +135,10 @@ index b75f9263a4c4..fdf38b9a4b19 100644
  #include <ctype.h>
 -#if !defined(__NEWLIB__) || __NEWLIB__ < 2 || \
 -    __NEWLIB__ == 2 && __NEWLIB_MINOR__ < 5
-+#if (!defined(__NEWLIB__) || __NEWLIB__ < 2 || \
++#if ((!defined(__NEWLIB__) || __NEWLIB__ < 2 || \
 +   __NEWLIB__ == 2 && __NEWLIB_MINOR__ < 5) || \
-+   defined(_LIBCPP_HAS_LOCALIZATION_STUBS)
++   defined(_LIBCPP_HAS_LOCALIZATION_STUBS)) && \
++   !(defined(__NEWLIB__) && (_POSIX_C_SOURCE < 200809))
  #include <__support/xlocale/__nop_locale_mgmt.h>
  #include <__support/xlocale/__posix_l_fallback.h>
  #include <__support/xlocale/__strtonum_fallback.h>
