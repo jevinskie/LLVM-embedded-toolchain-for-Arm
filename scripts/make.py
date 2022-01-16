@@ -187,6 +187,7 @@ class ToolchainBuild:
         projects = [
             'clang',
             'lld',
+            'jev-embedded-customs',
         ]
 
         dist_comps = [
@@ -210,6 +211,15 @@ class ToolchainBuild:
             'llvm-strip',
             'llvm-symbolizer',
             'LTO',
+            'jev-embedded-customs',
+            'llvm-lto',
+            'llvm-lto2',
+            'llc',
+            'opt',
+            'llvm-link',
+            'llvm-as',
+            'llvm-dis',
+            'llvm-mc',
         ]
 
         cmake_defs = self._get_common_cmake_defs_for_llvm()
@@ -277,6 +287,10 @@ class ToolchainBuild:
         join = os.path.join
         flags = (lib_spec.flags
                  + ' -D_POSIX_C_SOURCE=200809 -D_XOPEN_SOURCE=700 -D_BSD_SOURCE -D_DEFAULT_SOURCE -D_GNU_SOURCE -ffunction-sections -fdata-sections -fno-ident '
+                 + ' -g '
+                 + ' -Os -flto=full '
+                 # + ' -O0 '
+                 # + ' -Os '
                  + ' --sysroot {}'.format(join(cfg.target_llvm_rt_dir,
                                                lib_spec.name)))
         defs = {
@@ -311,7 +325,8 @@ class ToolchainBuild:
         cmake_defs.update({
             'CMAKE_BUILD_TYPE:STRING': 'Release',
             'CMAKE_ASM_COMPILER_TARGET': lib_spec.target,
-            'CMAKE_ASM_FLAGS': cmake_defs.get('CMAKE_C_FLAGS', ''),
+            'CMAKE_ASM_FLAGS': cmake_defs.get('CMAKE_C_FLAGS', '') + '-fno-lto',
+            'CMAKE_SIZEOF_VOID_P': '8',
             'LLVM_CONFIG_PATH': join(cfg.native_llvm_build_dir, 'bin',
                                      'llvm-config'),
             'COMPILER_RT_BUILD_SANITIZERS:BOOL': 'OFF',
@@ -543,6 +558,12 @@ class ToolchainBuild:
             'CFLAGS_FOR_TARGET': lib_spec.flags +
             ' -D__USES_INITFINI__' +
             ' -UHAVE_INIT_FINI' +
+            ' -DMALLOC_PROVIDED' +
+            ' -g ' +
+            ' -Os -flto=full ' +
+            # ' -O0 ' +
+            # ' -Os ' +
+            ' -D__OPTIMIZE_SIZE__ -DPREFER_SIZE_OVER_SPEED ' +
             ' --sysroot {}'.format(
                 join(cfg.target_llvm_rt_dir,
                      lib_spec.name,
