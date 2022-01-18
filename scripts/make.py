@@ -269,7 +269,7 @@ class ToolchainBuild:
         cfg = self.cfg
         cmake_defs = {
             'LLVM_TARGETS_TO_BUILD:STRING': self._backends_to_build(),
-            'CMAKE_BUILD_TYPE:STRING': 'Release',
+            'CMAKE_BUILD_TYPE:STRING': 'RelWithDebInfo',
         }
         if cfg.default_target is not None:
             cmake_defs['LLVM_DEFAULT_TARGET_TRIPLE:STRING'] = \
@@ -286,11 +286,12 @@ class ToolchainBuild:
         cfg = self.cfg
         join = os.path.join
         flags = (lib_spec.flags
-                 + ' -D_POSIX_C_SOURCE=200809 -D_XOPEN_SOURCE=700 -D_BSD_SOURCE -D_DEFAULT_SOURCE -D_GNU_SOURCE -ffunction-sections -fdata-sections -fno-ident '
-                 + ' -g '
-                 + ' -Os -flto=full '
-                 # + ' -O0 '
-                 # + ' -Os '
+                 + ' -D_POSIX_C_SOURCE=200809 -D_XOPEN_SOURCE=700 -D_BSD_SOURCE -D_DEFAULT_SOURCE -D_GNU_SOURCE -ffunction-sections -fdata-sections -fno-ident'
+                 + ' -ffixed-x18'
+                 + ' -g'
+                 + ' -Os -flto=full'
+                 # + ' -O0'
+                 # + ' -Os'
                  + ' --sysroot {}'.format(join(cfg.target_llvm_rt_dir,
                                                lib_spec.name)))
         defs = {
@@ -559,10 +560,11 @@ class ToolchainBuild:
             ' -D__USES_INITFINI__' +
             ' -UHAVE_INIT_FINI' +
             ' -DMALLOC_PROVIDED' +
-            ' -g ' +
-            ' -Os -flto=full ' +
-            # ' -O0 ' +
-            # ' -Os ' +
+            ' -ffixed-x18' +
+            ' -g' +
+            ' -Os -flto=full' +
+            # ' -O0' +
+            # ' -Os' +
             ' -D__OPTIMIZE_SIZE__ -DPREFER_SIZE_OVER_SPEED ' +
             ' --sysroot {}'.format(
                 join(cfg.target_llvm_rt_dir,
