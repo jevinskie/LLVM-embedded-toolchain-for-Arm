@@ -120,6 +120,7 @@ class Action(enum.Enum):
     PREPARE = 'prepare'
     CLANG = 'clang'
     NEWLIB = 'newlib'
+    MUSL = 'musl'
     COMPILER_RT = 'compiler-rt'
     LIBCXX = 'libcxx'
     CONFIGURE = 'configure'
@@ -412,6 +413,7 @@ class Config:  # pylint: disable=too-many-instance-attributes
         join = os.path.join
         self.llvm_repo_dir = join(self.repos_dir, 'llvm.git')
         self.newlib_repo_dir = join(self.repos_dir, 'newlib.git')
+        self.musl_repo_dir = join(self.repos_dir, 'musl.git')
         self.cmake_generator = 'Ninja' if self.use_ninja else 'Unix Makefiles'
         self.version_string = self.revision
         self.skip_reconfigure = self.build_mode == BuildMode.INCREMENTAL

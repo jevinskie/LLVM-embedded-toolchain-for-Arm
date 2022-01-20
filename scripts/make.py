@@ -443,6 +443,7 @@ class ToolchainBuild:
             'LIBCXX_ENABLE_UNICODE:BOOL': 'OFF',
             'LIBCXX_ENABLE_WIDE_CHARACTERS:BOOL': 'ON',
             'LIBCXX_ENABLE_LOCALIZATION_STUBS:BOOL': 'OFF',
+            'LIBCXX_HAS_MUSL_LIBC:BOOL': 'ON',
         }
 
         cmake_libunwind_defs = {
@@ -623,6 +624,69 @@ class ToolchainBuild:
                                            join(cfg.target_llvm_rt_dir,
                                                 lib_spec.name,
                                                 'include'))
+
+        if cfg.is_cross_compiling:
+            self._copy_runtime_to_native(lib_spec)
+
+    def build_musl(self, lib_spec: config.LibrarySpec) -> None:
+        """Build and install a single variant of musl."""
+        self.runner.reset_cwd()
+        cfg = self.cfg
+        join = os.path.join
+        musl_build_dir = join(cfg.build_dir, 'musl', lib_spec.name)
+        self._prepare_build_dir(musl_build_dir)
+
+        def compiler_str(bin_name: str, cfg: config.Config) -> str:
+            bin_path = join(cfg.native_llvm_bin_dir, bin_name)
+            if cfg.use_ccache:
+                bin_path = 'ccache ' + bin_path
+            return '{} -target {}'.format(bin_path,
+                                          lib_spec.target)
+
+        config_env = {
+            'CROSS_COMPILE': lib_spec.target + '-',
+            'CC': compiler_str('clang', cfg),
+            'CFLAGS': lib_spec.flags +
+            ' -ffixed-x18' +
+            ' -g' +
+            ' -Os -flto=full' +
+            # ' -O0' +
+            # ' -Os' +
+            ' --sysroot {}'.format(
+                join(cfg.target_llvm_rt_dir,
+                     lib_spec.name,
+                     lib_spec.target)),
+        }
+        for tool in ['ar', 'ranlib']:
+            var_name = '{}'.format(tool.upper())
+            tool_path = join(cfg.native_llvm_bin_dir, 'llvm-{}'.format(tool))
+            config_env[var_name] = tool_path
+
+        configure_args = [
+            join(cfg.musl_repo_dir, 'configure'),
+            '--target={}-baremetal'.format(lib_spec.triple_arch),
+            '--prefix={}'.format(join(cfg.target_llvm_rt_dir, lib_spec.name)),
+            '--disable-shared',
+            '--enable-static',
+            '--enable-debug',
+        ]
+        make_args = [
+            'make',
+            '-j{}'.format(cfg.num_threads),
+        ]
+        try:
+            logging.info('Configuring musl for %s', lib_spec.name)
+            self.runner.run(configure_args, cwd=musl_build_dir,
+                            env=config_env)
+            logging.info('Building and installing musl for %s',
+                         lib_spec.name)
+            self.runner.run(make_args, cwd=musl_build_dir)
+            self.runner.run(['make', 'install'], cwd=musl_build_dir)
+        except subprocess.SubprocessError as ex:
+            raise util.ToolchainBuildError from ex
+
+        logging.info('Copying mu include and lib directories to'
+                     ' installation directory')
 
         if cfg.is_cross_compiling:
             self._copy_runtime_to_native(lib_spec)

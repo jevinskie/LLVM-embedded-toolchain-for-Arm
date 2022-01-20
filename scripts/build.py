@@ -158,6 +158,8 @@ def parse_args_to_config() -> Config:
                              'other binary utilities\n'
                              '  newlib - build and install newlib for each '
                              'target\n'
+                             '  musl - build and install musl for each '
+                             'target\n'
                              '  compiler-rt - build and install compiler-rt '
                              'for each target\n'
                              '  libcxx - build and install libc++abi and '
@@ -183,7 +185,7 @@ def prepare_repositories(cfg: config.Config,
     # Determine which git action to perform
     do_remove_and_clone = False
     do_reset_and_patch = False
-    repo_dirs = [cfg.llvm_repo_dir, cfg.newlib_repo_dir]
+    repo_dirs = [cfg.llvm_repo_dir, cfg.newlib_repo_dir, cfg.musl_repo_dir]
     if cfg.checkout_mode == CheckoutMode.FORCE:
         # In the 'force' mode always remove existing checkouts, then clone the
         # repositories.
@@ -241,15 +243,21 @@ def build_all(cfg: Config) -> None:
                     'Native LLVM tools')
     run_or_skip(cfg, Action.CLANG, builder.build_clang, 'Clang build')
     if any(action in cfg.actions for action in
-           [Action.NEWLIB, Action.COMPILER_RT, Action.LIBCXX,
+           [
+            # Action.NEWLIB,
+            Action.MUSL,
+            Action.COMPILER_RT, Action.LIBCXX,
             Action.CONFIGURE]):
         logging.info('Building library variants and/or configurations: %s',
                      ', '.join(v.name for v in cfg.variants))
 
     for lib_spec in cfg.variants:
-        run_or_skip(cfg, Action.NEWLIB,
-                    functools.partial(builder.build_newlib, lib_spec),
-                    'newlib build for {}'.format(lib_spec.name))
+        # run_or_skip(cfg, Action.NEWLIB,
+        #             functools.partial(builder.build_newlib, lib_spec),
+        #             'newlib build for {}'.format(lib_spec.name))
+        run_or_skip(cfg, Action.MUSL,
+                    functools.partial(builder.build_musl, lib_spec),
+                    'musl build for {}'.format(lib_spec.name))
         run_or_skip(cfg, Action.COMPILER_RT,
                     functools.partial(builder.build_compiler_rt, lib_spec),
                     'compiler-rt build for {}'.format(lib_spec.name))

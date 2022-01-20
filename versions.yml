@@ -59,3 +59,8 @@ Revisions:
         Branch: master
         Revision: HEAD
         Patch: newlib-HEAD.patch
+      - Name: musl.git
+        FriendlyName: musl
+        URL:  https://github.com/jevinskie/musl-libc-aarch64-baremetal.git
+        Branch: jev/main
+        Revision: HEAD
