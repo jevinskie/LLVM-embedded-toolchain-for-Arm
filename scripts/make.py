@@ -288,8 +288,10 @@ class ToolchainBuild:
         flags = (lib_spec.flags
                  + ' -D_POSIX_C_SOURCE=200809 -D_XOPEN_SOURCE=700 -D_BSD_SOURCE -D_DEFAULT_SOURCE -D_GNU_SOURCE -ffunction-sections -fdata-sections -fno-ident'
                  + ' -ffixed-x18'
+                 + ' -fno-discard-value-names'
                  + ' -g'
-                 + ' -Os -flto=full'
+                 # + ' -Os -flto=full'
+                 + ' -O0 -flto=full'
                  # + ' -O0'
                  # + ' -Os'
                  + ' --sysroot {}'.format(join(cfg.target_llvm_rt_dir,
@@ -562,8 +564,10 @@ class ToolchainBuild:
             ' -UHAVE_INIT_FINI' +
             ' -DMALLOC_PROVIDED' +
             ' -ffixed-x18' +
+            ' -fno-discard-value-names' +
             ' -g' +
-            ' -Os -flto=full' +
+            # ' -Os -flto=full' +
+            ' -O0 -flto=full' +
             # ' -O0' +
             # ' -Os' +
             ' -D__OPTIMIZE_SIZE__ -DPREFER_SIZE_OVER_SPEED ' +
@@ -648,8 +652,10 @@ class ToolchainBuild:
             'CC': compiler_str('clang', cfg),
             'CFLAGS': lib_spec.flags +
             ' -ffixed-x18' +
+            ' -fno-discard-value-names' +
             ' -g' +
-            ' -Os -flto=full' +
+            # ' -Os -flto=full' +
+            ' -O0 -flto=full' +
             # ' -O0' +
             # ' -Os' +
             ' --sysroot {}'.format(
