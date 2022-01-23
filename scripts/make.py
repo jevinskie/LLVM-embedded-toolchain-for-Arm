@@ -24,6 +24,9 @@ import execution
 import config
 import util
 
+OtherCflags = '-ffixed-x18 -fno-discard-value-names'
+OptLevel = '-O0 -flto=full'
+DebugLevel = '-ggdb3'
 
 class RuntimeDLLs:
     """Class for handling Mingw-w64 runtime DLLs"""
@@ -287,13 +290,9 @@ class ToolchainBuild:
         join = os.path.join
         flags = (lib_spec.flags
                  + ' -D_POSIX_C_SOURCE=200809 -D_XOPEN_SOURCE=700 -D_BSD_SOURCE -D_DEFAULT_SOURCE -D_GNU_SOURCE -ffunction-sections -fdata-sections -fno-ident'
-                 + ' -ffixed-x18'
-                 + ' -fno-discard-value-names'
-                 + ' -g'
-                 # + ' -Os -flto=full'
-                 + ' -O0 -flto=full'
-                 # + ' -O0'
-                 # + ' -Os'
+                 + ' ' + OtherCflags
+                 + ' ' + DebugLevel
+                 + ' ' + OptLevel
                  + ' --sysroot {}'.format(join(cfg.target_llvm_rt_dir,
                                                lib_spec.name)))
         defs = {
@@ -563,13 +562,9 @@ class ToolchainBuild:
             ' -D__USES_INITFINI__' +
             ' -UHAVE_INIT_FINI' +
             ' -DMALLOC_PROVIDED' +
-            ' -ffixed-x18' +
-            ' -fno-discard-value-names' +
-            ' -g' +
-            # ' -Os -flto=full' +
-            ' -O0 -flto=full' +
-            # ' -O0' +
-            # ' -Os' +
+            ' ' + OtherCflags +
+            ' ' + DebugLevel +
+            ' ' + OptLevel +
             ' -D__OPTIMIZE_SIZE__ -DPREFER_SIZE_OVER_SPEED ' +
             ' --sysroot {}'.format(
                 join(cfg.target_llvm_rt_dir,
@@ -651,13 +646,9 @@ class ToolchainBuild:
             'CROSS_COMPILE': lib_spec.target + '-',
             'CC': compiler_str('clang', cfg),
             'CFLAGS': lib_spec.flags +
-            ' -ffixed-x18' +
-            ' -fno-discard-value-names' +
-            ' -g' +
-            # ' -Os -flto=full' +
-            ' -O0 -flto=full' +
-            # ' -O0' +
-            # ' -Os' +
+            ' ' + OtherCflags +
+            ' ' + DebugLevel +
+            ' ' + OptLevel +
             ' --sysroot {}'.format(
                 join(cfg.target_llvm_rt_dir,
                      lib_spec.name,
