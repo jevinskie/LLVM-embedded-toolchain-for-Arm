@@ -24,6 +24,8 @@ import execution
 import config
 import util
 
+LLVMCmakeBuildType = 'RelWithDebInfo'
+LibsCmakeBuildType = 'Debug'
 OtherCflags = '-ffixed-x18 -fno-discard-value-names'
 OptLevel = '-O0 -flto=full'
 DebugLevel = '-ggdb3'
@@ -272,7 +274,7 @@ class ToolchainBuild:
         cfg = self.cfg
         cmake_defs = {
             'LLVM_TARGETS_TO_BUILD:STRING': self._backends_to_build(),
-            'CMAKE_BUILD_TYPE:STRING': 'RelWithDebInfo',
+            'CMAKE_BUILD_TYPE:STRING': LLVMCmakeBuildType,
         }
         if cfg.default_target is not None:
             cmake_defs['LLVM_DEFAULT_TARGET_TRIPLE:STRING'] = \
@@ -325,7 +327,7 @@ class ToolchainBuild:
         rt_install_dir = join(cfg.target_llvm_rt_dir, lib_spec.name)
         cmake_defs = self._get_common_cmake_defs_for_libs(lib_spec)
         cmake_defs.update({
-            'CMAKE_BUILD_TYPE:STRING': 'Release',
+            'CMAKE_BUILD_TYPE:STRING': LibsCmakeBuildType,
             'CMAKE_ASM_COMPILER_TARGET': lib_spec.target,
             'CMAKE_ASM_FLAGS': cmake_defs.get('CMAKE_C_FLAGS', '') + '-fno-lto',
             'CMAKE_SIZEOF_VOID_P': '8',
@@ -401,7 +403,7 @@ class ToolchainBuild:
         install_dir = os.path.join(self.cfg.target_llvm_rt_dir,
                                    lib_spec.name)
         cmake_common_defs.update({
-            'CMAKE_BUILD_TYPE:STRING': 'MinSizeRel',
+            'CMAKE_BUILD_TYPE:STRING': LibsCmakeBuildType,
             'CMAKE_CXX_FLAGS': cxx_flags,
             'CMAKE_INSTALL_PREFIX': install_dir,
             # 'CMAKE_SIZEOF_VOID_P:STRING': '8',
@@ -410,9 +412,8 @@ class ToolchainBuild:
         cmake_libcxxabi_defs = {
             'LIBCXXABI_ENABLE_SHARED:BOOL': 'OFF',
             'LIBCXXABI_ENABLE_STATIC:BOOL': 'ON',
-            'LIBCXXABI_ENABLE_EXCEPTIONS:BOOL': 'OFF',
+            'LIBCXXABI_ENABLE_EXCEPTIONS:BOOL': 'ON',
             'LIBCXXABI_ENABLE_ASSERTIONS:BOOL': 'OFF',
-            'LIBCXXABI_ENABLE_PIC:BOOL': 'OFF',
             'LIBCXXABI_USE_COMPILER_RT:BOOL': 'ON',
             'LIBCXXABI_ENABLE_THREADS:BOOL': 'OFF',
             'LIBCXXABI_BAREMETAL:BOOL': 'ON',
@@ -434,14 +435,14 @@ class ToolchainBuild:
             'LIBCXX_ENABLE_DEBUG_MODE_SUPPORT:BOOL': 'OFF',
             'LIBCXX_ENABLE_RANDOM_DEVICE:BOOL': 'OFF',
             'LIBCXX_ENABLE_LOCALIZATION:BOOL': 'ON',
-            'LIBCXX_ENABLE_EXCEPTIONS:BOOL': 'OFF',
-            'LIBCXX_ENABLE_RTTI:BOOL': 'OFF',
+            'LIBCXX_ENABLE_EXCEPTIONS:BOOL': 'ON',
+            'LIBCXX_ENABLE_RTTI:BOOL': 'ON',
             'LIBCXX_ENABLE_THREADS:BOOL': 'OFF',
             'LIBCXX_ENABLE_MONOTONIC_CLOCK:BOOL': 'OFF',
             'LIBCXX_INCLUDE_BENCHMARKS:BOOL': 'OFF',
             'LIBCXX_CXX_ABI:STRING': 'libcxxabi',
             'LIBCXX_ABI_UNSTABLE:BOOL': 'ON',
-            'LIBCXX_ENABLE_UNICODE:BOOL': 'OFF',
+            'LIBCXX_ENABLE_UNICODE:BOOL': 'ON',
             'LIBCXX_ENABLE_WIDE_CHARACTERS:BOOL': 'ON',
             'LIBCXX_ENABLE_LOCALIZATION_STUBS:BOOL': 'OFF',
             'LIBCXX_HAS_MUSL_LIBC:BOOL': 'ON',
@@ -454,6 +455,7 @@ class ToolchainBuild:
             'LIBUNWIND_USE_COMPILER_RT:BOOL': 'ON',
             'LIBUNWIND_IS_BAREMETAL:BOOL': 'ON',
             'LIBUNWIND_REMEMBER_HEAP_ALLOC:BOOL': 'OFF',
+            'LIBUNWIND_INSTALL_HEADERS:BOOL': 'ON',
         }
 
         libs = [
