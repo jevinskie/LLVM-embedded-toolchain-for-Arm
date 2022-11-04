@@ -1,3 +1,19 @@
+diff --git a/libcxx/CMakeLists.txt b/libcxx/CMakeLists.txt
+index f08ca950735f..2b22cd97f338 100644
+--- a/libcxx/CMakeLists.txt
++++ b/libcxx/CMakeLists.txt
+@@ -644,7 +644,10 @@ endfunction()
+ # RTTI flags ==================================================================
+ function(cxx_add_rtti_flags target)
+   if (NOT LIBCXX_ENABLE_RTTI)
+-    target_add_compile_flags_if_supported(${target} PUBLIC -GR-)
++    # clang supports a different -G for MIPS
++    if (LIBCXX_TARGETING_CLANG_CL OR LIBCXX_TARGETING_MSCV)
++      target_add_compile_flags_if_supported(${target} PUBLIC -GR-)
++    endif ()
+     target_add_compile_flags_if_supported(${target} PUBLIC -fno-rtti)
+   endif()
+ endfunction()
 diff --git a/libcxx/include/cmath b/libcxx/include/cmath
 index ef3a67843e10..956bf0789e44 100644
 --- a/libcxx/include/cmath
@@ -34,7 +50,7 @@ index ef3a67843e10..956bf0789e44 100644
  template <class _A1, class _A2, class _A3>
  inline _LIBCPP_HIDE_FROM_ABI
 diff --git a/libcxx/include/math.h b/libcxx/include/math.h
-index ac57360cca9e..c8edc8bc8f21 100644
+index d5a7095a596a..973086ba47e6 100644
 --- a/libcxx/include/math.h
 +++ b/libcxx/include/math.h
 @@ -7,6 +7,9 @@
