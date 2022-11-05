@@ -186,7 +186,7 @@ set(CMAKE_INSTALL_MESSAGE NEVER CACHE STRING "")
 # Define which library variants to build and which flags to use
 # The order is <arch> <name suffix> <flags>
 set(library_variants
-    aarch64         ""                  "-march=armv8-a"
+    aarch64         "";                "-march=armv8-a"
     aarch64         _soft_nofp          "-march=armv8-a+nofp"
     armv6m          _soft_nofp          "-mfloat-abi=soft -march=armv6m"
     armv7em         _hard_fpv4_sp_d16   "-mfloat-abi=hard -march=armv7em -mfpu=fpv4-sp-d16"
@@ -200,6 +200,9 @@ set(library_variants
     armv8.1m.main   _soft_nofp_nomve    "-mfloat-abi=soft -march=armv8.1m.main+nofp+nomve"
 )
 
+foreach(variant ${LLVM_TOOLCHAIN_LIBRARY_VARIANTS})
+    set(enable_${variant} TRUE)
+endforeach()
 
 include(ExternalProject)
 include(FetchContent)
@@ -293,6 +296,76 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     )
 endif()
 
+list(APPEND CMAKE_MODULE_PATH ${llvmproject_SOURCE_DIR}/llvm/cmake/modules)
+include(AddLLVM)
+
+# Destructively iterate over the 3-tuples defining the variants.
+list(LENGTH library_variants lvlen)
+message(WARNING "lvlen: ${lvlen} library_variants: ${library_variants}")
+set(library_variants_tmp ${library_variants})
+message(WARNING "library_variants_tmp: ${library_variants_tmp}")
+while(library_variants_tmp)
+    list(POP_FRONT library_variants_tmp target_arch variant_suffix flags)
+    message(WARNING "target_arch: ${target_arch} variant_suffix: ${variant_suffix} flags: ${flags}")
+
+    if(target_arch STREQUAL "aarch64")
+        set(target "aarch64-none-elf")
+    else()
+        set(target "${target_arch}-none-eabi")
+    endif()
+    if ("${variant_suffix}" STREQUAL "\"\"")
+        set(variant "${target_arch}")
+    else()
+        set(variant "${target_arch}${variant_suffix}")
+    endif()
+
+    if(LLVM_TOOLCHAIN_LIBRARY_VARIANTS)
+        if(NOT enable_${variant})
+            message("A Disabling library variant ${variant}")
+            continue()
+        else()
+            message("A Enabling library variant ${variant}")
+        endif()
+    endif()
+
+    # install symlinks
+    llvm_install_symlink(CLANG clang ${target}-cc ALWAYS_GENERATE)
+    llvm_install_symlink(CLANG clang ${target}-c++ ALWAYS_GENERATE)
+    llvm_install_symlink(CLANG clang ${target}-clang ALWAYS_GENERATE)
+    llvm_install_symlink(CLANG clang ${target}-clang++ ALWAYS_GENERATE)
+    llvm_install_symlink(LLD lld ${target}-ld ALWAYS_GENERATE)
+    llvm_install_symlink(LLVM llvm-ar ${target}-ar ALWAYS_GENERATE)
+    llvm_install_symlink(LLVM llvm-cxxfilt ${target}-cxxfilt ALWAYS_GENERATE)
+    llvm_install_symlink(LLVM llvm-nm ${target}-nm ALWAYS_GENERATE)
+    llvm_install_symlink(LLVM llvm-objcopy ${target}-objcopy ALWAYS_GENERATE)
+    llvm_install_symlink(LLVM llvm-objdump ${target}-objdump ALWAYS_GENERATE)
+    llvm_install_symlink(LLVM llvm-ar ${target}-ranlib ALWAYS_GENERATE)
+    llvm_install_symlink(LLVM llvm-readobj ${target}-readelf ALWAYS_GENERATE)
+    llvm_install_symlink(LLVM llvm-readobj ${target}-readobj ALWAYS_GENERATE)
+    llvm_install_symlink(LLVM llvm-objcopy ${target}-strip ALWAYS_GENERATE)
+    llvm_install_symlink(LLVM llvm-size ${target}-size ALWAYS_GENERATE)
+    set(target_symlinks
+        ${target}-cc
+        ${target}-c++
+        ${target}-clang
+        ${target}-clang++
+        ${target}-ld
+        ${target}-ar
+        ${target}-cxxfilt
+        ${target}-nm
+        ${target}-objcopy
+        ${target}-objdump
+        ${target}-ranlib
+        ${target}-readelf
+        ${target}-strip
+        ${target}-size
+    )
+    message(WARNING "target_symlinks: ${target_symlinks}")
+    # list(APPEND LLVM_DISTRIBUTION_COMPONENTS ${target_symlinks})
+endwhile()
+
+message(WARNING "LLVM_DISTRIBUTION_COMPONENTS: ${LLVM_DISTRIBUTION_COMPONENTS}")
+
 # These must be set before include(CPack) which the llvm CMakeLists.txt does.
 # Restrict which LLVM components are installed.
 if(LLVM_TOOLCHAIN_CROSS_BUILD_MINGW)
@@ -333,7 +406,6 @@ include(CPack)
 set(llvm_bin ${LLVM_BINARY_DIR}/bin)
 
 # Ensure LLVM tool symlinks are installed.
-list(APPEND CMAKE_MODULE_PATH ${llvmproject_SOURCE_DIR}/llvm/cmake/modules)
 llvm_install_symlink(LLVM llvm-ranlib llvm-ar ALWAYS_GENERATE)
 llvm_install_symlink(LLVM llvm-readelf llvm-readobj ALWAYS_GENERATE)
 llvm_install_symlink(LLVM llvm-strip llvm-objcopy ALWAYS_GENERATE)
@@ -385,10 +457,6 @@ add_dependencies(
     version_txt
 )
 
-foreach(variant ${LLVM_TOOLCHAIN_LIBRARY_VARIANTS})
-    set(enable_${variant} TRUE)
-endforeach()
-
 # Destructively iterate over the 3-tuples defining the variants.
 while(library_variants)
     list(POP_FRONT library_variants target_arch variant_suffix flags)
@@ -400,7 +468,11 @@ while(library_variants)
         set(target "${target_arch}-none-eabi")
         set(cpu_family arm)
     endif()
-    set(variant "${target_arch}${variant_suffix}")
+    if ("${variant_suffix}" STREQUAL "\"\"")
+        set(variant "${target_arch}")
+    else()
+        set(variant "${target_arch}${variant_suffix}")
+    endif()
     set(common_flags "--target=${target} ${flags} ${LLVM_TOOLCHAIN_COMMON_FLAGS}")
 
     if(LLVM_TOOLCHAIN_LIBRARY_VARIANTS)
