@@ -405,11 +405,6 @@ include(CPack)
 
 set(llvm_bin ${LLVM_BINARY_DIR}/bin)
 
-# Ensure LLVM tool symlinks are installed.
-llvm_install_symlink(LLVM llvm-ranlib llvm-ar ALWAYS_GENERATE)
-llvm_install_symlink(LLVM llvm-readelf llvm-readobj ALWAYS_GENERATE)
-llvm_install_symlink(LLVM llvm-strip llvm-objcopy ALWAYS_GENERATE)
-
 # For building picolibc use Meson.
 # Although picolibc has support for building with CMake, the Meson code
 # is more mature and works better with LLVM.
