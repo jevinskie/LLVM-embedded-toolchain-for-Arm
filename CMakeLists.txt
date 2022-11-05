@@ -245,7 +245,7 @@ if (${LLVM_TOOLCHAIN_LIBC} STREQUAL "picolibc")
     FetchContent_MakeAvailable(picolibc)
 endif()
 
-if (${LLVM_TOOLCHAIN_LIBC} STREQUAL "picolibc")
+if (${LLVM_TOOLCHAIN_LIBC} STREQUAL "musl")
     FetchContent_Declare(musl
         GIT_REPOSITORY https://github.com/jevinskie/musl-libc-aarch64-baremetal
         GIT_TAG origin/jev/main
@@ -331,12 +331,6 @@ add_subdirectory(
 include(CPack)
 
 set(llvm_bin ${LLVM_BINARY_DIR}/bin)
-
-# Ensure LLVM tool symlinks are installed.
-list(APPEND CMAKE_MODULE_PATH ${llvmproject_SOURCE_DIR}/llvm/cmake/modules)
-llvm_install_symlink(LLVM llvm-ranlib llvm-ar ALWAYS_GENERATE)
-llvm_install_symlink(LLVM llvm-readelf llvm-readobj ALWAYS_GENERATE)
-llvm_install_symlink(LLVM llvm-strip llvm-objcopy ALWAYS_GENERATE)
 
 # For building picolibc use Meson.
 # Although picolibc has support for building with CMake, the Meson code
