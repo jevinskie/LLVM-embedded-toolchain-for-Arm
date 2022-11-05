@@ -3,3 +3,4 @@ LLVM Embedded Toolchain for Arm ${LLVMEmbeddedToolchainForArm_VERSION}
 Components:
 * LLVM: https://github.com/llvm/llvm-project.git (commit ${llvmproject_COMMIT})
 * Picolibc: https://github.com/picolibc/picolibc.git (commit ${picolibc_COMMIT})
+* musl: https://github.com/jevinskie/musl-libc-aarch64-baremetal (commit ${musl_COMMIT})

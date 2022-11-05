@@ -349,6 +349,8 @@ add_custom_target(
     -DLLVMEmbeddedToolchainForArm_VERSION=${LLVMEmbeddedToolchainForArm_VERSION}
     -Dllvmproject_SOURCE_DIR=${llvmproject_SOURCE_DIR}
     -Dpicolibc_SOURCE_DIR=${picolibc_SOURCE_DIR}
+    -Dmusl_SOURCE_DIR=${musl_SOURCE_DIR}
+    -DLLVM_TOOLCHAIN_LIBC=${LLVM_TOOLCHAIN_LIBC}
     -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_version_txt.cmake
     BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/VERSION.txt
 )
@@ -513,41 +515,19 @@ while(library_variants)
             SOURCE_DIR ${musl_SOURCE_DIR}
             INSTALL_DIR ${sysroot}
             PREFIX musl/${variant}
-            DEPENDS clang lld llvm-ar llvm-config llvm-nm llvm-ranlib llvm-strip
-            CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env CROSS_COMPILE=${target}- ${musl_SOURCE_DIR}/configure --prefix <INSTALL_DIR>
-            BUILD_COMMAND ninja
-            INSTALL_COMMAND meson install ${MESON_INSTALL_QUIET}
+            DEPENDS clang lld llvm-ar llvm-config llvm-nm llvm-ranlib llvm-strip ${target_symlinks}
+            CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env PATH=${llvm_bin}:$ENV{PATH} CROSS_COMPILE=${target}- CC=${target}-clang "CFLAGS=${common_flags} --sysroot ${sysroot}" ${musl_SOURCE_DIR}/configure --prefix=<INSTALL_DIR>
+            BUILD_COMMAND ${CMAKE_COMMAND} -E env PATH=${llvm_bin}:$ENV{PATH} make
+            INSTALL_COMMAND ${CMAKE_COMMAND} -E env PATH=${llvm_bin}:$ENV{PATH} make install
             USES_TERMINAL_CONFIGURE TRUE
             USES_TERMINAL_BUILD TRUE
             USES_TERMINAL_TEST TRUE
             LIST_SEPARATOR ,
             # Always run the build command so that incremental builds are correct.
             BUILD_ALWAYS TRUE
-            CONFIGURE_HANDLED_BY_BUILD TRUE
+            CONFIGURE_HANDLED_BY_BUILD FALSE
         )
-        # Set meson_c_args to a comma-separated list of the clang path
-        # and flags e.g. 'path/to/clang', '--target=armv6m-none-eabi',
-        # '-march=armv6m'
-        set(meson_c_args "${common_flags}")
-        string(REPLACE " " "', '" meson_c_args "${meson_c_args}")
-        set(meson_c_args "'${llvm_bin}/clang', '${meson_c_args}'")
-        ExternalProject_Get_Property(musl_${variant} BINARY_DIR)
-        configure_file(cmake/meson-cross-build.txt.in ${BINARY_DIR}/meson-cross-build.txt @ONLY)
         set(libc_target musl_${variant})
-        set(libc_specific_runtimes_options
-            -DLIBCXXABI_ENABLE_EXCEPTIONS=ON
-            -DLIBCXXABI_ENABLE_THREADS=ON
-            -DLIBCXX_ENABLE_EXCEPTIONS=OFF
-            -DLIBCXX_ENABLE_MONOTONIC_CLOCK=OFF
-            -DLIBCXX_ENABLE_RANDOM_DEVICE=OFF
-            -DLIBCXX_ENABLE_RTTI=OFF
-            -DLIBCXX_ENABLE_THREADS=OFF
-            -DLIBCXX_ENABLE_WIDE_CHARACTERS=OFF
-            # _LIBCPP_PROVIDES_DEFAULT_RUNE_TABLE: Avoids a static assert
-            # failing in <__locale>.
-            -DLIBCXX_EXTRA_SITE_DEFINES=_LIBCPP_PROVIDES_DEFAULT_RUNE_TABLE
-            -DLIBUNWIND_ENABLE_THREADS=OFF
-        )
     endif()
 
     # compiler-rt
