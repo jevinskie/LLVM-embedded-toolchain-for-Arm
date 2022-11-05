@@ -125,8 +125,17 @@ set(LLVM_TOOLCHAIN_LIBC
     "picolibc" CACHE STRING
     "Build with the specified libc. If not specified then use picolibc."
 )
+set(LLVM_TOOLCHAIN_COMMON_FLAGS
+    "" CACHE STRING
+    "Build with the additional specified C/C++ flags."
+)
 
 set(BUG_REPORT_URL "https://github.com/ARM-software/LLVM-embedded-toolchain-for-Arm/issues" CACHE STRING "")
+
+set(LLVM_TOOLCHAIN_ADDITIONAL_DIST_COMP
+    "" CACHE STRING
+    "Build with the additional specified Clang/LLVM targets."
+)
 set(LLVM_DISTRIBUTION_COMPONENTS
     clang-format
     clang-resource-headers
@@ -149,6 +158,7 @@ set(LLVM_DISTRIBUTION_COMPONENTS
     llvm-strip
     llvm-symbolizer
     LTO
+    ${LLVM_TOOLCHAIN_ADDITIONAL_DIST_COMP}
     CACHE STRING ""
 )
 set(LLVM_ENABLE_PROJECTS clang;lld CACHE STRING "")
@@ -218,33 +228,36 @@ FetchContent_Declare(llvmproject
     # can't be used.
     SOURCE_SUBDIR do_not_add_llvm_subdir_yet
 )
-
-FetchContent_Declare(picolibc
-    GIT_REPOSITORY https://github.com/picolibc/picolibc.git
-    GIT_TAG origin/main
-    GIT_SHALLOW TRUE
-    GIT_PROGRESS TRUE
-    PATCH_COMMAND git reset --quiet --hard && git clean --quiet --force -dx && git apply ${CMAKE_CURRENT_SOURCE_DIR}/patches/picolibc-HEAD.patch
-    # We only want to download the content, not configure it at this
-    # stage. picolibc will be built in many configurations using
-    # ExternalProject_Add using the sources that are checked out here.
-    SOURCE_SUBDIR do_not_add_picolibc_subdir
-)
-
-FetchContent_Declare(musl
-    GIT_REPOSITORY https://github.com/jevinskie/musl-libc-aarch64-baremetal
-    GIT_TAG origin/jev/main
-    GIT_SHALLOW TRUE
-    GIT_PROGRESS TRUE
-    # We only want to download the content, not configure it at this
-    # stage. picolibc will be built in many configurations using
-    # ExternalProject_Add using the sources that are checked out here.
-    SOURCE_SUBDIR do_not_add_musl_subdir
-)
-
 FetchContent_MakeAvailable(llvmproject)
-FetchContent_MakeAvailable(picolibc)
-FetchContent_MakeAvailable(musl)
+
+if (${LLVM_TOOLCHAIN_LIBC} STREQUAL "picolibc")
+    FetchContent_Declare(picolibc
+        GIT_REPOSITORY https://github.com/picolibc/picolibc.git
+        GIT_TAG origin/main
+        GIT_SHALLOW TRUE
+        GIT_PROGRESS TRUE
+        PATCH_COMMAND git reset --quiet --hard && git clean --quiet --force -dx && git apply ${CMAKE_CURRENT_SOURCE_DIR}/patches/picolibc-HEAD.patch
+        # We only want to download the content, not configure it at this
+        # stage. picolibc will be built in many configurations using
+        # ExternalProject_Add using the sources that are checked out here.
+        SOURCE_SUBDIR do_not_add_picolibc_subdir
+    )
+    FetchContent_MakeAvailable(picolibc)
+endif()
+
+if (${LLVM_TOOLCHAIN_LIBC} STREQUAL "picolibc")
+    FetchContent_Declare(musl
+        GIT_REPOSITORY https://github.com/jevinskie/musl-libc-aarch64-baremetal
+        GIT_TAG origin/jev/main
+        GIT_SHALLOW TRUE
+        GIT_PROGRESS TRUE
+        # We only want to download the content, not configure it at this
+        # stage. picolibc will be built in many configurations using
+        # ExternalProject_Add using the sources that are checked out here.
+        SOURCE_SUBDIR do_not_add_musl_subdir
+    )
+    FetchContent_MakeAvailable(musl)
+endif()
 
 
 # Grab the version out of LLVM sources
@@ -388,7 +401,7 @@ while(library_variants)
         set(cpu_family arm)
     endif()
     set(variant "${target_arch}${variant_suffix}")
-    set(common_flags "--target=${target} ${flags}")
+    set(common_flags "--target=${target} ${flags} ${LLVM_TOOLCHAIN_COMMON_FLAGS}")
 
     if(LLVM_TOOLCHAIN_LIBRARY_VARIANTS)
         if(NOT enable_${variant})
@@ -471,9 +484,9 @@ while(library_variants)
             musl_${variant}
             SOURCE_DIR ${musl_SOURCE_DIR}
             INSTALL_DIR ${sysroot}
-            PREFIX picolibc/${variant}
+            PREFIX musl/${variant}
             DEPENDS clang lld llvm-ar llvm-config llvm-nm llvm-ranlib llvm-strip
-            CONFIGURE_COMMAND ${MESON_EXECUTABLE} -Dincludedir=include -Dlibdir=lib --prefix <INSTALL_DIR> --cross-file <BINARY_DIR>/meson-cross-build.txt ${musl_SOURCE_DIR}
+            CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env CROSS_COMPILE=${target}- ${musl_SOURCE_DIR}/configure --prefix <INSTALL_DIR>
             BUILD_COMMAND ninja
             INSTALL_COMMAND meson install ${MESON_INSTALL_QUIET}
             USES_TERMINAL_CONFIGURE TRUE
