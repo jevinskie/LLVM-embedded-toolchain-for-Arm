@@ -484,7 +484,6 @@ while(library_variants)
         -DCOMPILER_RT_BUILD_SANITIZERS=OFF
         -DCOMPILER_RT_BUILD_XRAY=OFF
         -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON
-        -DLLVM_CCACHE_BUILD=${LLVM_CCACHE_BUILD}
         -DLLVM_CONFIG_PATH=${llvm_bin}/llvm-config
         USES_TERMINAL_CONFIGURE TRUE
         USES_TERMINAL_BUILD TRUE
@@ -536,6 +535,8 @@ while(library_variants)
         -DLIBCXXABI_ENABLE_STATIC=ON
         -DLIBCXXABI_LIBCXX_INCLUDES=${sysroot}/include/c++/v1
         -DLIBCXXABI_USE_COMPILER_RT=ON
+        -DLIBCXXABI_BUILTINS_LIBRARY=${sysroot}/lib/libclang_rt.builtins-${cpu_family}.a
+        -DCOMPILER_RT_LIBRARY_builtins_${target}=${sysroot}/lib/libclang_rt.builtins-${cpu_family}.a
         -DLIBCXXABI_USE_LLVM_UNWINDER=ON
         -DLIBCXX_CXX_ABI=libcxxabi
         -DLIBCXX_ENABLE_DEBUG_MODE=OFF

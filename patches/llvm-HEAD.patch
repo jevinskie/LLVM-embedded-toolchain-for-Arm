@@ -634,3 +634,22 @@ index d5a7095a596a..973086ba47e6 100644
  
  template <class _A1>
  inline _LIBCPP_HIDE_FROM_ABI
+diff --git a/libcxxabi/cmake/config-ix.cmake b/libcxxabi/cmake/config-ix.cmake
+index ff9a1bf349e5..f4362aeaa56b 100644
+--- a/libcxxabi/cmake/config-ix.cmake
++++ b/libcxxabi/cmake/config-ix.cmake
+@@ -38,9 +38,11 @@ if (CXX_SUPPORTS_NOSTDLIBXX_FLAG OR C_SUPPORTS_NODEFAULTLIBS_FLAG)
+     list(APPEND CMAKE_REQUIRED_LIBRARIES c)
+   endif ()
+   if (LIBCXXABI_USE_COMPILER_RT)
+-    include(HandleCompilerRT)
+-    find_compiler_rt_library(builtins LIBCXXABI_BUILTINS_LIBRARY
+-                             FLAGS "${LIBCXXABI_COMPILE_FLAGS}")
++    if (NOT LIBCXXABI_BUILTINS_LIBRARY)
++      include(HandleCompilerRT)
++      find_compiler_rt_library(builtins LIBCXXABI_BUILTINS_LIBRARY
++                               FLAGS "${LIBCXXABI_COMPILE_FLAGS}")
++    endif()
+     if (LIBCXXABI_BUILTINS_LIBRARY)
+       list(APPEND CMAKE_REQUIRED_LIBRARIES "${LIBCXXABI_BUILTINS_LIBRARY}")
+     else()
