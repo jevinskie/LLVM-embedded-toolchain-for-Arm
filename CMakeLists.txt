@@ -48,9 +48,11 @@
 #   git -C repos/llvm-project apply ../../patches/llvm-HEAD.patch
 #   git -C repos clone https://github.com/picolibc/picolibc.git
 #   git -C repos/picolibc apply ../../patches/picolibc-HEAD.patch
+#   git -C repos clone https://github.com/jevinskie/musl-libc-aarch64-baremetal musl
+
 #   mkdir build
 #   cd build
-#   cmake .. -GNinja -DFETCHCONTENT_SOURCE_DIR_LLVMPROJECT=../repos/llvm-project -DFETCHCONTENT_SOURCE_DIR_PICOLIBC=../repos/picolibc
+#   cmake .. -GNinja -DFETCHCONTENT_SOURCE_DIR_LLVMPROJECT=../repos/llvm-project -DFETCHCONTENT_SOURCE_DIR_PICOLIBC=../repos/picolibc -DFETCHCONTENT_SOURCE_DIR_MUSL=../repos/musl
 #   ninja
 #   ninja check-llvm-toolchain
 #
@@ -118,6 +120,10 @@ option(
 set(LLVM_TOOLCHAIN_LIBRARY_VARIANTS
     "" CACHE STRING
     "Build only the specified library variants. If not specified then build all variants."
+)
+set(LLVM_TOOLCHAIN_LIBC
+    "picolibc" CACHE STRING
+    "Build with the specified libc. If not specified then use picolibc."
 )
 
 set(BUG_REPORT_URL "https://github.com/ARM-software/LLVM-embedded-toolchain-for-Arm/issues" CACHE STRING "")
@@ -225,8 +231,20 @@ FetchContent_Declare(picolibc
     SOURCE_SUBDIR do_not_add_picolibc_subdir
 )
 
+FetchContent_Declare(musl
+    GIT_REPOSITORY https://github.com/jevinskie/musl-libc-aarch64-baremetal
+    GIT_TAG origin/jev/main
+    GIT_SHALLOW TRUE
+    GIT_PROGRESS TRUE
+    # We only want to download the content, not configure it at this
+    # stage. picolibc will be built in many configurations using
+    # ExternalProject_Add using the sources that are checked out here.
+    SOURCE_SUBDIR do_not_add_musl_subdir
+)
+
 FetchContent_MakeAvailable(llvmproject)
 FetchContent_MakeAvailable(picolibc)
+FetchContent_MakeAvailable(musl)
 
 
 # Grab the version out of LLVM sources
@@ -403,7 +421,7 @@ while(library_variants)
     endif()
 
     # Can change this per library variant, if desired
-    set(libc_type picolibc)
+    set(libc_type ${LLVM_TOOLCHAIN_LIBC})
 
     if(libc_type STREQUAL "picolibc")
         ExternalProject_Add(
@@ -435,6 +453,49 @@ while(library_variants)
         set(libc_specific_runtimes_options
             -DLIBCXXABI_ENABLE_EXCEPTIONS=OFF
             -DLIBCXXABI_ENABLE_THREADS=OFF
+            -DLIBCXX_ENABLE_EXCEPTIONS=OFF
+            -DLIBCXX_ENABLE_MONOTONIC_CLOCK=OFF
+            -DLIBCXX_ENABLE_RANDOM_DEVICE=OFF
+            -DLIBCXX_ENABLE_RTTI=OFF
+            -DLIBCXX_ENABLE_THREADS=OFF
+            -DLIBCXX_ENABLE_WIDE_CHARACTERS=OFF
+            # _LIBCPP_PROVIDES_DEFAULT_RUNE_TABLE: Avoids a static assert
+            # failing in <__locale>.
+            -DLIBCXX_EXTRA_SITE_DEFINES=_LIBCPP_PROVIDES_DEFAULT_RUNE_TABLE
+            -DLIBUNWIND_ENABLE_THREADS=OFF
+        )
+    endif()
+
+    if(libc_type STREQUAL "musl")
+        ExternalProject_Add(
+            musl_${variant}
+            SOURCE_DIR ${musl_SOURCE_DIR}
+            INSTALL_DIR ${sysroot}
+            PREFIX picolibc/${variant}
+            DEPENDS clang lld llvm-ar llvm-config llvm-nm llvm-ranlib llvm-strip
+            CONFIGURE_COMMAND ${MESON_EXECUTABLE} -Dincludedir=include -Dlibdir=lib --prefix <INSTALL_DIR> --cross-file <BINARY_DIR>/meson-cross-build.txt ${musl_SOURCE_DIR}
+            BUILD_COMMAND ninja
+            INSTALL_COMMAND meson install ${MESON_INSTALL_QUIET}
+            USES_TERMINAL_CONFIGURE TRUE
+            USES_TERMINAL_BUILD TRUE
+            USES_TERMINAL_TEST TRUE
+            LIST_SEPARATOR ,
+            # Always run the build command so that incremental builds are correct.
+            BUILD_ALWAYS TRUE
+            CONFIGURE_HANDLED_BY_BUILD TRUE
+        )
+        # Set meson_c_args to a comma-separated list of the clang path
+        # and flags e.g. 'path/to/clang', '--target=armv6m-none-eabi',
+        # '-march=armv6m'
+        set(meson_c_args "${common_flags}")
+        string(REPLACE " " "', '" meson_c_args "${meson_c_args}")
+        set(meson_c_args "'${llvm_bin}/clang', '${meson_c_args}'")
+        ExternalProject_Get_Property(musl_${variant} BINARY_DIR)
+        configure_file(cmake/meson-cross-build.txt.in ${BINARY_DIR}/meson-cross-build.txt @ONLY)
+        set(libc_target musl_${variant})
+        set(libc_specific_runtimes_options
+            -DLIBCXXABI_ENABLE_EXCEPTIONS=ON
+            -DLIBCXXABI_ENABLE_THREADS=ON
             -DLIBCXX_ENABLE_EXCEPTIONS=OFF
             -DLIBCXX_ENABLE_MONOTONIC_CLOCK=OFF
             -DLIBCXX_ENABLE_RANDOM_DEVICE=OFF
@@ -607,6 +668,7 @@ set(third_party_license_files
     ${llvmproject_SOURCE_DIR}/libcxxabi/LICENSE.TXT     LIBCXXABI-LICENSE.txt
     ${picolibc_SOURCE_DIR}/COPYING.NEWLIB               COPYING.NEWLIB
     ${picolibc_SOURCE_DIR}/COPYING.picolibc             COPYING.picolibc
+    ${musl_SOURCE_DIR}/COPYRIGHT                        MUSL-LICENSE.txt
 )
 while(third_party_license_files)
     list(POP_FRONT third_party_license_files source_file destination_name)

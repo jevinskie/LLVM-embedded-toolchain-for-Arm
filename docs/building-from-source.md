@@ -46,9 +46,10 @@ git -C repos clone https://github.com/llvm/llvm-project.git
 git -C repos/llvm-project apply ../../patches/llvm-HEAD.patch
 git -C repos clone https://github.com/picolibc/picolibc.git
 git -C repos/picolibc apply ../../patches/picolibc-HEAD.patch
+git -C repos clone https://github.com/jevinskie/musl-libc-aarch64-baremetal musl
 mkdir build
 cd build
-cmake .. -GNinja -DFETCHCONTENT_SOURCE_DIR_LLVMPROJECT=../repos/llvm-project -DFETCHCONTENT_SOURCE_DIR_PICOLIBC=../repos/picolibc
+cmake .. -GNinja -DFETCHCONTENT_SOURCE_DIR_LLVMPROJECT=../repos/llvm-project -DFETCHCONTENT_SOURCE_DIR_PICOLIBC=../repos/picolibc -DFETCHCONTENT_SOURCE_DIR_PICOLIBC=../repos/musl
 ninja llvm-toolchain
 ```
 
