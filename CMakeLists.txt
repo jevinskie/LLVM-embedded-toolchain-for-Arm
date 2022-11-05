@@ -186,7 +186,7 @@ set(CMAKE_INSTALL_MESSAGE NEVER CACHE STRING "")
 # Define which library variants to build and which flags to use
 # The order is <arch> <name suffix> <flags>
 set(library_variants
-    aarch64         "";                "-march=armv8-a"
+    aarch64         ""                  "-march=armv8-a"
     aarch64         _soft_nofp          "-march=armv8-a+nofp"
     armv6m          _soft_nofp          "-mfloat-abi=soft -march=armv6m"
     armv7em         _hard_fpv4_sp_d16   "-mfloat-abi=hard -march=armv7em -mfpu=fpv4-sp-d16"
@@ -302,7 +302,7 @@ include(AddLLVM)
 # Destructively iterate over the 3-tuples defining the variants.
 list(LENGTH library_variants lvlen)
 message(WARNING "lvlen: ${lvlen} library_variants: ${library_variants}")
-set(library_variants_tmp ${library_variants})
+set(library_variants_tmp "${library_variants}")
 message(WARNING "library_variants_tmp: ${library_variants_tmp}")
 while(library_variants_tmp)
     list(POP_FRONT library_variants_tmp target_arch variant_suffix flags)
