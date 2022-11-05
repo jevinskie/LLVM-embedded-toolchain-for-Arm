@@ -407,37 +407,38 @@ while(library_variants)
     endif()
 
     # install symlinks
-    llvm_install_symlink(CLANG ${target}-cc clang)
-    llvm_install_symlink(CLANG ${target}-c++ clang)
-    llvm_install_symlink(CLANG ${target}-clang clang)
-    llvm_install_symlink(CLANG ${target}-clang++ clang)
-    # llvm_install_symlink(LLD lld ${target}-ld ALWAYS_GENERATE)
-    # llvm_install_symlink(LLVM llvm-ar ${target}-ar ALWAYS_GENERATE)
-    # llvm_install_symlink(LLVM llvm-cxxfilt ${target}-cxxfilt ALWAYS_GENERATE)
-    # llvm_install_symlink(LLVM llvm-nm ${target}-nm ALWAYS_GENERATE)
-    # llvm_install_symlink(LLVM llvm-objcopy ${target}-objcopy ALWAYS_GENERATE)
-    # llvm_install_symlink(LLVM llvm-objdump ${target}-objdump ALWAYS_GENERATE)
-    # llvm_install_symlink(LLVM llvm-ar ${target}-ranlib ALWAYS_GENERATE)
-    # llvm_install_symlink(LLVM llvm-readobj ${target}-readelf ALWAYS_GENERATE)
-    # llvm_install_symlink(LLVM llvm-readobj ${target}-readobj ALWAYS_GENERATE)
-    # llvm_install_symlink(LLVM llvm-objcopy ${target}-strip ALWAYS_GENERATE)
-    # llvm_install_symlink(LLVM llvm-size ${target}-size ALWAYS_GENERATE)
+    llvm_add_tool_symlink(CLANG ${target}-cc clang)
+    llvm_add_tool_symlink(CLANG ${target}-c++ clang)
+    llvm_add_tool_symlink(CLANG ${target}-clang clang)
+    llvm_add_tool_symlink(CLANG ${target}-clang++ clang)
+    llvm_add_tool_symlink(LLD   ${target}-ld lld)
+    llvm_add_tool_symlink(LLVM  ${target}-ar llvm-ar)
+    llvm_add_tool_symlink(LLVM  ${target}-cxxfilt llvm-cxxfilt)
+    llvm_add_tool_symlink(LLVM  ${target}-nm llvm-nm)
+    llvm_add_tool_symlink(LLVM  ${target}-objcopy llvm-objcopy)
+    llvm_add_tool_symlink(LLVM  ${target}-objdump llvm-objdump)
+    llvm_add_tool_symlink(LLVM  ${target}-ranlib llvm-ar)
+    llvm_add_tool_symlink(LLVM  ${target}-readelf llvm-readobj)
+    llvm_add_tool_symlink(LLVM  ${target}-readobj llvm-readobj)
+    llvm_add_tool_symlink(LLVM  ${target}-strip llvm-objcopy)
+    llvm_add_tool_symlink(LLVM  ${target}-size llvm-size)
     set(target_symlinks
         ${target}-cc
         ${target}-c++
         ${target}-clang
         ${target}-clang++
-        # ${target}-ld
-        # ${target}-ar
-        # ${target}-cxxfilt
-        # ${target}-nm
-        # ${target}-objcopy
-        # ${target}-objdump
-        # ${target}-ranlib
-        # ${target}-readelf
-        # ${target}-strip
-        # ${target}-size
+        ${target}-ld
+        ${target}-ar
+        ${target}-cxxfilt
+        ${target}-nm
+        ${target}-objcopy
+        ${target}-objdump
+        ${target}-ranlib
+        ${target}-readelf
+        ${target}-strip
+        ${target}-size
     )
+    add_dependencies(llvm-toolchain ${target_symlinks})
 
     # Create clang configuration files
     # https://clang.llvm.org/docs/UsersManual.html#configuration-files
