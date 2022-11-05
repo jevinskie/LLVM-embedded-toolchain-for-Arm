@@ -406,6 +406,39 @@ while(library_variants)
         endif()
     endif()
 
+    # install symlinks
+    llvm_install_symlink(CLANG ${target}-cc clang)
+    llvm_install_symlink(CLANG ${target}-c++ clang)
+    llvm_install_symlink(CLANG ${target}-clang clang)
+    llvm_install_symlink(CLANG ${target}-clang++ clang)
+    # llvm_install_symlink(LLD lld ${target}-ld ALWAYS_GENERATE)
+    # llvm_install_symlink(LLVM llvm-ar ${target}-ar ALWAYS_GENERATE)
+    # llvm_install_symlink(LLVM llvm-cxxfilt ${target}-cxxfilt ALWAYS_GENERATE)
+    # llvm_install_symlink(LLVM llvm-nm ${target}-nm ALWAYS_GENERATE)
+    # llvm_install_symlink(LLVM llvm-objcopy ${target}-objcopy ALWAYS_GENERATE)
+    # llvm_install_symlink(LLVM llvm-objdump ${target}-objdump ALWAYS_GENERATE)
+    # llvm_install_symlink(LLVM llvm-ar ${target}-ranlib ALWAYS_GENERATE)
+    # llvm_install_symlink(LLVM llvm-readobj ${target}-readelf ALWAYS_GENERATE)
+    # llvm_install_symlink(LLVM llvm-readobj ${target}-readobj ALWAYS_GENERATE)
+    # llvm_install_symlink(LLVM llvm-objcopy ${target}-strip ALWAYS_GENERATE)
+    # llvm_install_symlink(LLVM llvm-size ${target}-size ALWAYS_GENERATE)
+    set(target_symlinks
+        ${target}-cc
+        ${target}-c++
+        ${target}-clang
+        ${target}-clang++
+        # ${target}-ld
+        # ${target}-ar
+        # ${target}-cxxfilt
+        # ${target}-nm
+        # ${target}-objcopy
+        # ${target}-objdump
+        # ${target}-ranlib
+        # ${target}-readelf
+        # ${target}-strip
+        # ${target}-size
+    )
+
     # Create clang configuration files
     # https://clang.llvm.org/docs/UsersManual.html#configuration-files
     set(crt0 "crt0.o")
@@ -673,10 +706,19 @@ set(third_party_license_files
     ${llvmproject_SOURCE_DIR}/compiler-rt/LICENSE.TXT   COMPILER-RT-LICENSE.txt
     ${llvmproject_SOURCE_DIR}/libcxx/LICENSE.TXT        LIBCXX-LICENSE.txt
     ${llvmproject_SOURCE_DIR}/libcxxabi/LICENSE.TXT     LIBCXXABI-LICENSE.txt
-    ${picolibc_SOURCE_DIR}/COPYING.NEWLIB               COPYING.NEWLIB
-    ${picolibc_SOURCE_DIR}/COPYING.picolibc             COPYING.picolibc
-    ${musl_SOURCE_DIR}/COPYRIGHT                        MUSL-LICENSE.txt
 )
+if (${LLVM_TOOLCHAIN_LIBC} STREQUAL "picolibc")
+    list(APPEND third_party_license_files
+        ${picolibc_SOURCE_DIR}/COPYING.NEWLIB               COPYING.NEWLIB
+        ${picolibc_SOURCE_DIR}/COPYING.picolibc             COPYING.picolibc
+    )
+endif()
+if (${LLVM_TOOLCHAIN_LIBC} STREQUAL "musl")
+    list(APPEND third_party_license_files
+        ${musl_SOURCE_DIR}/COPYRIGHT                        MUSL-LICENSE.txt
+    )
+endif()
+
 while(third_party_license_files)
     list(POP_FRONT third_party_license_files source_file destination_name)
     install(
