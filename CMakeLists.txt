@@ -510,6 +510,9 @@ while(library_variants)
     endif()
 
     if(libc_type STREQUAL "musl")
+        set(common_flags "${common_flags} -D_POSIX_C_SOURCE=200809 -D_XOPEN_SOURCE=700 -D_BSD_SOURCE -D_DEFAULT_SOURCE -D_GNU_SOURCE")
+        include(ProcessorCount)
+        ProcessorCount(num_cores)
         ExternalProject_Add(
             musl_${variant}
             SOURCE_DIR ${musl_SOURCE_DIR}
@@ -517,8 +520,8 @@ while(library_variants)
             PREFIX musl/${variant}
             DEPENDS clang lld llvm-ar llvm-config llvm-nm llvm-ranlib llvm-strip ${target_symlinks}
             CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env PATH=${llvm_bin}:$ENV{PATH} CROSS_COMPILE=${target}- CC=${target}-clang "CFLAGS=${common_flags} --sysroot ${sysroot}" ${musl_SOURCE_DIR}/configure --prefix=<INSTALL_DIR>
-            BUILD_COMMAND ${CMAKE_COMMAND} -E env PATH=${llvm_bin}:$ENV{PATH} make
-            INSTALL_COMMAND ${CMAKE_COMMAND} -E env PATH=${llvm_bin}:$ENV{PATH} make install
+            BUILD_COMMAND ${CMAKE_COMMAND} -E env PATH=${llvm_bin}:$ENV{PATH} make -j ${num_cores}
+            INSTALL_COMMAND ${CMAKE_COMMAND} -E env PATH=${llvm_bin}:$ENV{PATH} make -j ${num_cores} install
             USES_TERMINAL_CONFIGURE TRUE
             USES_TERMINAL_BUILD TRUE
             USES_TERMINAL_TEST TRUE
