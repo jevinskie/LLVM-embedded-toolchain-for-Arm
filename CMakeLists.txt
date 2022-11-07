@@ -322,13 +322,70 @@ else()
     set(CPACK_SYSTEM_NAME "${CMAKE_SYSTEM_NAME}-${processor_name}")
 endif()
 
+message(WARNING "before llvm include")
 add_subdirectory(
     ${llvmproject_SOURCE_DIR}/llvm llvm
 )
+message(WARNING "after llvm include")
+
+foreach(variant ${LLVM_TOOLCHAIN_LIBRARY_VARIANTS})
+    set(enable_${variant} TRUE)
+endforeach()
+
+# make symlinks
+list(APPEND CMAKE_MODULE_PATH ${llvmproject_SOURCE_DIR}/llvm/cmake/modules)
+# Destructively iterate over the 3-tuples defining the variants.
+set(library_variants_tmp "${library_variants}")
+while(library_variants_tmp)
+    list(POP_FRONT library_variants_tmp target_arch variant_suffix flags)
+
+    if(target_arch STREQUAL "aarch64")
+        set(target "aarch64-none-elf")
+    else()
+        set(target "${target_arch}-none-eabi")
+    endif()
+
+    message(WARNING "CPACK_COMPONENTS_ALL: ${CPACK_COMPONENTS_ALL}")
+    set(variant "${target_arch}${variant_suffix}")
+    message(WARNING "LLVM_TOOLCHAIN_LIBRARY_VARIANTS: ${LLVM_TOOLCHAIN_LIBRARY_VARIANTS} variant: ${variant}")
+    if(LLVM_TOOLCHAIN_LIBRARY_VARIANTS)
+        if(NOT enable_${variant})
+            message(WARNING "continue since enable_${variant} is: ${enable_${variant}}")
+            continue()
+        endif()
+    endif()
+
+    set(${target}_symlinks
+        ${target}-cc
+        ${target}-c++
+        ${target}-clang
+        ${target}-clang++
+        ${target}-ld
+        ${target}-ar
+        ${target}-cxxfilt
+        ${target}-nm
+        ${target}-objcopy
+        ${target}-objdump
+        ${target}-ranlib
+        ${target}-readelf
+        ${target}-strip
+        ${target}-size
+    )
+    message(WARNING "${target}_symlinks: ${${target}_symlinks}")
+    list(APPEND CPACK_COMPONENTS_ALL ${${target}_symlinks})
+
+    # add_dependencies(llvm-toolchain ${${target}_symlinks})
+endwhile()
 
 # Including CPack again after llvm CMakeLists.txt included it
 # resets CPACK_PACKAGE_VERSION to the default MAJOR.MINOR.PATCH format.
 include(CPack)
+message(WARNING "after cpack include")
+
+# Ensure LLVM tool symlinks are installed.
+llvm_install_symlink(LLVM llvm-ranlib llvm-ar ALWAYS_GENERATE)
+llvm_install_symlink(LLVM llvm-readelf llvm-readobj ALWAYS_GENERATE)
+llvm_install_symlink(LLVM llvm-strip llvm-objcopy ALWAYS_GENERATE)
 
 set(llvm_bin ${LLVM_BINARY_DIR}/bin)
 
@@ -365,6 +422,19 @@ install(
 # Groups all the targets that comprise the toolchain.
 add_custom_target(llvm-toolchain ALL)
 
+# LLVM-style install
+# To use it:
+#   ninja install-llvm-toolchain
+add_custom_target(
+    install-llvm-toolchain
+    COMMAND
+        "${CMAKE_COMMAND}"
+        --install ${CMAKE_BINARY_DIR}
+        --strip
+        --component llvm-toolchain
+    USES_TERMINAL
+)
+
 # Groups all the runtime targets
 add_custom_target(llvm-toolchain-runtimes)
 
@@ -380,10 +450,6 @@ add_dependencies(
     llvm-toolchain-runtimes
     version_txt
 )
-
-foreach(variant ${LLVM_TOOLCHAIN_LIBRARY_VARIANTS})
-    set(enable_${variant} TRUE)
-endforeach()
 
 # Destructively iterate over the 3-tuples defining the variants.
 while(library_variants)
@@ -409,13 +475,17 @@ while(library_variants)
     endif()
 
     # install symlinks
+    list(APPEND LLVM_TOOLCHAIN_TOOLS ${${target}_symlinks})
     llvm_add_tool_symlink(CLANG ${target}-cc clang)
+    # llvm_install_symlink(CLANG ${target}-cc clang)
     llvm_add_tool_symlink(CLANG ${target}-c++ clang)
     llvm_add_tool_symlink(CLANG ${target}-clang clang)
     llvm_add_tool_symlink(CLANG ${target}-clang++ clang)
     llvm_add_tool_symlink(LLD   ${target}-ld lld)
     llvm_add_tool_symlink(LLVM  ${target}-ar llvm-ar)
     llvm_add_tool_symlink(LLVM  ${target}-cxxfilt llvm-cxxfilt)
+    # add_llvm_install_targets(install-${target}-cxxfilt COMPONENT ${target}-cxxfilt)
+    # llvm_install_symlink(LLVM ${target}-cxxfilt llvm-cxxfilt)
     llvm_add_tool_symlink(LLVM  ${target}-nm llvm-nm)
     llvm_add_tool_symlink(LLVM  ${target}-objcopy llvm-objcopy)
     llvm_add_tool_symlink(LLVM  ${target}-objdump llvm-objdump)
@@ -424,23 +494,13 @@ while(library_variants)
     llvm_add_tool_symlink(LLVM  ${target}-readobj llvm-readobj)
     llvm_add_tool_symlink(LLVM  ${target}-strip llvm-objcopy)
     llvm_add_tool_symlink(LLVM  ${target}-size llvm-size)
-    set(target_symlinks
-        ${target}-cc
-        ${target}-c++
-        ${target}-clang
-        ${target}-clang++
-        ${target}-ld
-        ${target}-ar
-        ${target}-cxxfilt
-        ${target}-nm
-        ${target}-objcopy
-        ${target}-objdump
-        ${target}-ranlib
-        ${target}-readelf
-        ${target}-strip
-        ${target}-size
-    )
-    add_dependencies(llvm-toolchain ${target_symlinks})
+    # message(WARNING "target symlinks target: ${target}: ${target}_symlinks ${${target}_symlinks}")
+    add_dependencies(llvm-toolchain ${${target}_symlinks})
+    list(APPEND LLVM_DISTRIBUTION_COMPONENTS ${${target}_symlinks})
+    foreach(link ${${target}_symlinks})
+        add_dependencies(install-llvm-toolchain install-${link})
+    endforeach()
+    # list(APPEND CPACK_COMPONENTS_ALL ${${target}_symlinks})
 
     # Create clang configuration files
     # https://clang.llvm.org/docs/UsersManual.html#configuration-files
@@ -532,7 +592,7 @@ while(library_variants)
             SOURCE_DIR ${musl_SOURCE_DIR}
             INSTALL_DIR ${sysroot}
             PREFIX musl/${variant}
-            DEPENDS clang lld llvm-ar llvm-config llvm-nm llvm-ranlib llvm-strip ${target_symlinks}
+            DEPENDS clang lld llvm-ar llvm-config llvm-nm llvm-ranlib llvm-strip ${${target}_symlinks}
             CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env PATH=${llvm_bin}:$ENV{PATH} CROSS_COMPILE=${target}- CC=${target}-clang "CFLAGS=${common_flags} --sysroot ${sysroot}" ${musl_SOURCE_DIR}/configure --prefix=<INSTALL_DIR> --disable-shared --target=${cpu_family}-baremetal
             BUILD_COMMAND ${CMAKE_COMMAND} -E env PATH=${llvm_bin}:$ENV{PATH} make -j ${num_cores}
             INSTALL_COMMAND ${CMAKE_COMMAND} -E env PATH=${llvm_bin}:$ENV{PATH} make -j ${num_cores} install
@@ -745,15 +805,6 @@ install(
 # LLVM-style install
 # To use it:
 #   ninja install-llvm-toolchain
-add_custom_target(
-    install-llvm-toolchain
-    COMMAND
-        "${CMAKE_COMMAND}"
-        --install ${CMAKE_BINARY_DIR}
-        --strip
-        --component llvm-toolchain
-    USES_TERMINAL
-)
 if(LLVM_TOOLCHAIN_CROSS_BUILD_MINGW)
     # No further action needed to install because the MinGW binaries
     # are declared to be part of the llvm-toolchain
