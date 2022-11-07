@@ -1,0 +1,4 @@
+${common_flags}
+-fuse-ld=lld
+--sysroot <CFGDIR>/../lib/clang-runtimes/${target}
+<CFGDIR>/../lib/clang-runtimes/${target}/lib/${crt0}${extra_args}

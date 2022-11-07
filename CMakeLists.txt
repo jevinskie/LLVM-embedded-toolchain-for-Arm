@@ -322,60 +322,16 @@ else()
     set(CPACK_SYSTEM_NAME "${CMAKE_SYSTEM_NAME}-${processor_name}")
 endif()
 
-message(WARNING "before llvm include")
 add_subdirectory(
     ${llvmproject_SOURCE_DIR}/llvm llvm
 )
-message(WARNING "after llvm include")
-
-foreach(variant ${LLVM_TOOLCHAIN_LIBRARY_VARIANTS})
-    set(enable_${variant} TRUE)
-endforeach()
-
-# make symlinks
-list(APPEND CMAKE_MODULE_PATH ${llvmproject_SOURCE_DIR}/llvm/cmake/modules)
-# Destructively iterate over the 3-tuples defining the variants.
-set(library_variants_tmp "${library_variants}")
-while(library_variants_tmp)
-    list(POP_FRONT library_variants_tmp target_arch variant_suffix flags)
-
-    if(target_arch STREQUAL "aarch64")
-        set(target "aarch64-none-elf")
-    else()
-        set(target "${target_arch}-none-eabi")
-    endif()
-
-    set(variant "${target_arch}${variant_suffix}")
-    if(LLVM_TOOLCHAIN_LIBRARY_VARIANTS)
-        if(NOT enable_${variant})
-            continue()
-        endif()
-    endif()
-
-    set(${target}_symlinks
-        ${target}-cc
-        ${target}-c++
-        ${target}-clang
-        ${target}-clang++
-        ${target}-ld
-        ${target}-ar
-        ${target}-cxxfilt
-        ${target}-nm
-        ${target}-objcopy
-        ${target}-objdump
-        ${target}-ranlib
-        ${target}-readelf
-        ${target}-strip
-        ${target}-size
-    )
-endwhile()
 
 # Including CPack again after llvm CMakeLists.txt included it
 # resets CPACK_PACKAGE_VERSION to the default MAJOR.MINOR.PATCH format.
 include(CPack)
-message(WARNING "after cpack include")
 
 # Ensure LLVM tool symlinks are installed.
+list(APPEND CMAKE_MODULE_PATH ${llvmproject_SOURCE_DIR}/llvm/cmake/modules)
 llvm_install_symlink(LLVM llvm-ranlib llvm-ar ALWAYS_GENERATE)
 llvm_install_symlink(LLVM llvm-readelf llvm-readobj ALWAYS_GENERATE)
 llvm_install_symlink(LLVM llvm-strip llvm-objcopy ALWAYS_GENERATE)
@@ -444,6 +400,10 @@ add_dependencies(
     version_txt
 )
 
+foreach(variant ${LLVM_TOOLCHAIN_LIBRARY_VARIANTS})
+    set(enable_${variant} TRUE)
+endforeach()
+
 # Destructively iterate over the 3-tuples defining the variants.
 while(library_variants)
     list(POP_FRONT library_variants target_arch variant_suffix flags)
@@ -498,20 +458,49 @@ while(library_variants)
     llvm_install_symlink(LLVM   ${target}-strip llvm-objcopy ALWAYS_GENERATE)
     llvm_add_tool_symlink(LLVM  ${target}-size llvm-size)
     llvm_install_symlink(LLVM   ${target}-size llvm-size ALWAYS_GENERATE)
+    set(${target}_symlinks
+        ${target}-cc
+        ${target}-c++
+        ${target}-clang
+        ${target}-clang++
+        ${target}-ld
+        ${target}-ar
+        ${target}-cxxfilt
+        ${target}-nm
+        ${target}-objcopy
+        ${target}-objdump
+        ${target}-ranlib
+        ${target}-readelf
+        ${target}-strip
+        ${target}-size
+    )
     add_dependencies(llvm-toolchain ${${target}_symlinks})
     list(APPEND CPACK_COMPONENTS_ALL ${${target}_symlinks})
+
+    message(WARNING "install symlink: ${INSTALL_SYMLINK}")
+    install(SCRIPT ${llvmproject_SOURCE_DIR}/llvm/cmake/modules/LLVMInstallSymlink.cmake
+            CODE "install_symlink(\"${target}\" \"${variant}\" \"lib/clang-runtimes\")"
+            COMPONENT llvm-toolchain)
+
+    add_custom_target(${target}-runtime-alias
+                        COMMAND
+                        ${CMAKE_COMMAND} -E create_symlink
+                        ${LLVM_BINARY_DIR}/lib/clang-runtimes/${target}
+                        ${LLVM_BINARY_DIR}/lib/clang-runtimes/${variant})
 
     # Create clang configuration files
     # https://clang.llvm.org/docs/UsersManual.html#configuration-files
     set(crt0 "crt0.o")
     set(extra_args "")
     configure_file(cmake/config.cfg.in ${llvm_bin}/${variant}.cfg)
+    configure_file(cmake/config-target.cfg.in ${llvm_bin}/${target}.cfg)
     set(crt0 "crt0-semihost.o")
     set(extra_args "\n-lsemihost")
     configure_file(cmake/config.cfg.in ${llvm_bin}/${variant}_semihost.cfg)
     install(FILES
         ${llvm_bin}/${variant}.cfg
         ${llvm_bin}/${variant}_semihost.cfg
+        ${llvm_bin}/${target}.cfg
         DESTINATION bin
         COMPONENT llvm-toolchain
     )
