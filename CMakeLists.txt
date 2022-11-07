@@ -510,7 +510,21 @@ while(library_variants)
     endif()
 
     if(libc_type STREQUAL "musl")
-        set(common_flags "${common_flags} -D_POSIX_C_SOURCE=200809 -D_XOPEN_SOURCE=700 -D_BSD_SOURCE -D_DEFAULT_SOURCE -D_GNU_SOURCE")
+        set(libc_target musl_${variant})
+        set(libc_specific_runtimes_options
+            -DLIBCXX_HAS_MUSL_LIBC=ON
+            -DLIBCXX_ENABLE_LOCALIZATION=ON
+            -DLIBCXX_ENABLE_LOCALIZATION_STUBS=OFF
+            -DLIBCXXABI_ENABLE_EXCEPTIONS=ON
+            -DLIBCXXABI_ENABLE_THREADS=OFF
+            -DLIBCXX_ENABLE_EXCEPTIONS=ON
+            -DLIBCXX_ENABLE_RANDOM_DEVICE=OFF
+            -DLIBCXX_ENABLE_RTTI=ON
+            -DLIBCXX_ENABLE_THREADS=OFF
+            -DLIBCXX_ENABLE_WIDE_CHARACTERS=ON
+            -DLIBUNWIND_ENABLE_THREADS=OFF
+        )
+
         include(ProcessorCount)
         ProcessorCount(num_cores)
         ExternalProject_Add(
@@ -519,7 +533,7 @@ while(library_variants)
             INSTALL_DIR ${sysroot}
             PREFIX musl/${variant}
             DEPENDS clang lld llvm-ar llvm-config llvm-nm llvm-ranlib llvm-strip ${target_symlinks}
-            CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env PATH=${llvm_bin}:$ENV{PATH} CROSS_COMPILE=${target}- CC=${target}-clang "CFLAGS=${common_flags} --sysroot ${sysroot}" ${musl_SOURCE_DIR}/configure --prefix=<INSTALL_DIR>
+            CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env PATH=${llvm_bin}:$ENV{PATH} CROSS_COMPILE=${target}- CC=${target}-clang "CFLAGS=${common_flags} --sysroot ${sysroot}" ${musl_SOURCE_DIR}/configure --prefix=<INSTALL_DIR> --disable-shared --target=${cpu_family}-baremetal
             BUILD_COMMAND ${CMAKE_COMMAND} -E env PATH=${llvm_bin}:$ENV{PATH} make -j ${num_cores}
             INSTALL_COMMAND ${CMAKE_COMMAND} -E env PATH=${llvm_bin}:$ENV{PATH} make -j ${num_cores} install
             USES_TERMINAL_CONFIGURE TRUE
@@ -530,7 +544,8 @@ while(library_variants)
             BUILD_ALWAYS TRUE
             CONFIGURE_HANDLED_BY_BUILD FALSE
         )
-        set(libc_target musl_${variant})
+        # set(common_flags "${common_flags} -D_POSIX_C_SOURCE=200809 -D_XOPEN_SOURCE=700 -D_BSD_SOURCE -D_DEFAULT_SOURCE -D_GNU_SOURCE")
+        set(common_flags "${common_flags} -D_XOPEN_SOURCE=700 -D_GNU_SOURCE")
     endif()
 
     # compiler-rt
