@@ -345,12 +345,9 @@ while(library_variants_tmp)
         set(target "${target_arch}-none-eabi")
     endif()
 
-    message(WARNING "CPACK_COMPONENTS_ALL: ${CPACK_COMPONENTS_ALL}")
     set(variant "${target_arch}${variant_suffix}")
-    message(WARNING "LLVM_TOOLCHAIN_LIBRARY_VARIANTS: ${LLVM_TOOLCHAIN_LIBRARY_VARIANTS} variant: ${variant}")
     if(LLVM_TOOLCHAIN_LIBRARY_VARIANTS)
         if(NOT enable_${variant})
-            message(WARNING "continue since enable_${variant} is: ${enable_${variant}}")
             continue()
         endif()
     endif()
@@ -371,10 +368,6 @@ while(library_variants_tmp)
         ${target}-strip
         ${target}-size
     )
-    message(WARNING "${target}_symlinks: ${${target}_symlinks}")
-    list(APPEND CPACK_COMPONENTS_ALL ${${target}_symlinks})
-
-    # add_dependencies(llvm-toolchain ${${target}_symlinks})
 endwhile()
 
 # Including CPack again after llvm CMakeLists.txt included it
@@ -475,7 +468,6 @@ while(library_variants)
     endif()
 
     # install symlinks
-    # list(APPEND LLVM_TOOLCHAIN_TOOLS ${${target}_symlinks})
     llvm_add_tool_symlink(CLANG ${target}-cc clang)
     llvm_install_symlink(CLANG  ${target}-cc clang ALWAYS_GENERATE)
     llvm_add_tool_symlink(CLANG ${target}-c++ clang)
@@ -506,13 +498,7 @@ while(library_variants)
     llvm_install_symlink(LLVM   ${target}-strip llvm-objcopy ALWAYS_GENERATE)
     llvm_add_tool_symlink(LLVM  ${target}-size llvm-size)
     llvm_install_symlink(LLVM   ${target}-size llvm-size ALWAYS_GENERATE)
-    # message(WARNING "target symlinks target: ${target}: ${target}_symlinks ${${target}_symlinks}")
-    # add_dependencies(llvm-toolchain ${${target}_symlinks})
     add_dependencies(llvm-toolchain ${${target}_symlinks})
-    # list(APPEND LLVM_DISTRIBUTION_COMPONENTS ${${target}_symlinks})
-    # foreach(link ${${target}_symlinks})
-        # add_dependencies(install-llvm-toolchain install-${link})
-    # endforeach()
     list(APPEND CPACK_COMPONENTS_ALL ${${target}_symlinks})
 
     # Create clang configuration files
