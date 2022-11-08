@@ -477,7 +477,6 @@ while(library_variants)
     add_dependencies(llvm-toolchain ${${target}_symlinks})
     list(APPEND CPACK_COMPONENTS_ALL ${${target}_symlinks})
 
-    message(WARNING "install symlink: ${INSTALL_SYMLINK}")
     install(SCRIPT ${llvmproject_SOURCE_DIR}/llvm/cmake/modules/LLVMInstallSymlink.cmake
             CODE "install_symlink(\"${target}\" \"${variant}\" \"lib/clang-runtimes\")"
             COMPONENT llvm-toolchain)
@@ -494,6 +493,7 @@ while(library_variants)
     set(extra_args "")
     configure_file(cmake/config.cfg.in ${llvm_bin}/${variant}.cfg)
     configure_file(cmake/config-target.cfg.in ${llvm_bin}/${target}.cfg)
+    configure_file(cmake/config-target-c++.cfg.in ${llvm_bin}/clang++.cfg)
     set(crt0 "crt0-semihost.o")
     set(extra_args "\n-lsemihost")
     configure_file(cmake/config.cfg.in ${llvm_bin}/${variant}_semihost.cfg)
@@ -501,6 +501,7 @@ while(library_variants)
         ${llvm_bin}/${variant}.cfg
         ${llvm_bin}/${variant}_semihost.cfg
         ${llvm_bin}/${target}.cfg
+        ${llvm_bin}/clang++.cfg
         DESTINATION bin
         COMPONENT llvm-toolchain
     )
@@ -581,7 +582,7 @@ while(library_variants)
             INSTALL_DIR ${sysroot}
             PREFIX musl/${variant}
             DEPENDS clang lld llvm-ar llvm-config llvm-nm llvm-ranlib llvm-strip ${${target}_symlinks}
-            CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env PATH=${llvm_bin}:$ENV{PATH} CROSS_COMPILE=${target}- CC=${target}-clang "CFLAGS=${common_flags} --sysroot ${sysroot}" ${musl_SOURCE_DIR}/configure --prefix=<INSTALL_DIR> --disable-shared --target=${cpu_family}-baremetal
+            CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env PATH=${llvm_bin}:$ENV{PATH} CROSS_COMPILE=${target}- CC=${target}-clang "CFLAGS=${common_flags} -ggdb3 --sysroot ${sysroot}" ${musl_SOURCE_DIR}/configure --prefix=<INSTALL_DIR> --disable-shared --target=${cpu_family}-baremetal
             BUILD_COMMAND ${CMAKE_COMMAND} -E env PATH=${llvm_bin}:$ENV{PATH} make -j ${num_cores}
             INSTALL_COMMAND ${CMAKE_COMMAND} -E env PATH=${llvm_bin}:$ENV{PATH} make -j ${num_cores} install
             USES_TERMINAL_CONFIGURE TRUE
@@ -598,7 +599,7 @@ while(library_variants)
 
     # compiler-rt
 
-    set(runtimes_flags "${common_flags} -ffunction-sections -fdata-sections -fno-ident --sysroot ${sysroot}")
+    set(runtimes_flags "${common_flags} -ggdb3 -ffunction-sections -fdata-sections -fno-ident --sysroot ${sysroot}")
 
     ExternalProject_Add(
         compiler_rt_${variant}
