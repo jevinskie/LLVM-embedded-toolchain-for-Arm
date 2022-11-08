@@ -495,8 +495,6 @@ while(library_variants)
                         ${CMAKE_COMMAND} -E create_symlink ${variant} ${target})
     add_dependencies(llvm-toolchain ${target}-runtime-alias)
 
-
-
     # Create clang configuration files
     # https://clang.llvm.org/docs/UsersManual.html#configuration-files
     set(crt0 "crt0.o")
