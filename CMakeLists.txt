@@ -230,7 +230,7 @@ FetchContent_Declare(llvmproject
 )
 FetchContent_MakeAvailable(llvmproject)
 
-if (${LLVM_TOOLCHAIN_LIBC} STREQUAL "picolibc")
+if(${LLVM_TOOLCHAIN_LIBC} STREQUAL "picolibc")
     FetchContent_Declare(picolibc
         GIT_REPOSITORY https://github.com/picolibc/picolibc.git
         GIT_TAG origin/main
@@ -245,7 +245,7 @@ if (${LLVM_TOOLCHAIN_LIBC} STREQUAL "picolibc")
     FetchContent_MakeAvailable(picolibc)
 endif()
 
-if (${LLVM_TOOLCHAIN_LIBC} STREQUAL "musl")
+if(${LLVM_TOOLCHAIN_LIBC} STREQUAL "musl")
     FetchContent_Declare(musl
         GIT_REPOSITORY https://github.com/jevinskie/musl-libc-aarch64-baremetal
         GIT_TAG origin/jev/main
@@ -755,13 +755,13 @@ set(third_party_license_files
     ${llvmproject_SOURCE_DIR}/libcxx/LICENSE.TXT        LIBCXX-LICENSE.txt
     ${llvmproject_SOURCE_DIR}/libcxxabi/LICENSE.TXT     LIBCXXABI-LICENSE.txt
 )
-if (${LLVM_TOOLCHAIN_LIBC} STREQUAL "picolibc")
+if(${LLVM_TOOLCHAIN_LIBC} STREQUAL "picolibc")
     list(APPEND third_party_license_files
         ${picolibc_SOURCE_DIR}/COPYING.NEWLIB               COPYING.NEWLIB
         ${picolibc_SOURCE_DIR}/COPYING.picolibc             COPYING.picolibc
     )
 endif()
-if (${LLVM_TOOLCHAIN_LIBC} STREQUAL "musl")
+if(${LLVM_TOOLCHAIN_LIBC} STREQUAL "musl")
     list(APPEND third_party_license_files
         ${musl_SOURCE_DIR}/COPYRIGHT                        MUSL-LICENSE.txt
     )
