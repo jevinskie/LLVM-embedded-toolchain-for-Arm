@@ -187,7 +187,9 @@ set(CMAKE_INSTALL_MESSAGE NEVER CACHE STRING "")
 # The order is <arch> <name suffix> <flags>
 set(library_variants
     aarch64         ""                  "-march=armv8-a"
-    aarch64         _soft_nofp          "-march=armv8-a+nofp"
+    aarch64         _soft_nofp          "-march=armv8-a -mgeneral-regs-only"
+    arm64           ""                  "-march=armv8-a"
+    arm64           _soft_nofp          "-march=armv8-a -mgeneral-regs-only"
     armv6m          _soft_nofp          "-mfloat-abi=soft -march=armv6m"
     armv7em         _hard_fpv4_sp_d16   "-mfloat-abi=hard -march=armv7em -mfpu=fpv4-sp-d16"
     armv7em         _hard_fpv5_d16      "-mfloat-abi=hard -march=armv7em -mfpu=fpv5-d16"
@@ -411,6 +413,9 @@ while(library_variants)
     if(target_arch STREQUAL "aarch64")
         set(target "aarch64-none-elf")
         set(cpu_family aarch64)
+    elseif(target_arch STREQUAL "arm64")
+        set(target "arm64-none-macho")
+        set(cpu_family arm64)
     else()
         set(target "${target_arch}-none-eabi")
         set(cpu_family arm)
