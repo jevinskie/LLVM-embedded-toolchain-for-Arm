@@ -414,7 +414,7 @@ while(library_variants)
         set(target "aarch64-none-elf")
         set(cpu_family aarch64)
     elseif(target_arch STREQUAL "arm64")
-        set(target "arm64-none-macho")
+        set(target "arm64-apple-macos")
         set(cpu_family arm64)
     else()
         set(target "${target_arch}-none-eabi")
@@ -433,6 +433,8 @@ while(library_variants)
     endif()
 
     # install symlinks
+    llvm_add_tool_symlink(CLANG ${target}-as clang)
+    llvm_install_symlink(CLANG  ${target}-as clang ALWAYS_GENERATE)
     llvm_add_tool_symlink(CLANG ${target}-cc clang)
     llvm_install_symlink(CLANG  ${target}-cc clang ALWAYS_GENERATE)
     llvm_add_tool_symlink(CLANG ${target}-c++ clang)
@@ -464,6 +466,7 @@ while(library_variants)
     llvm_add_tool_symlink(LLVM  ${target}-size llvm-size)
     llvm_install_symlink(LLVM   ${target}-size llvm-size ALWAYS_GENERATE)
     set(${target}_symlinks
+        ${target}-as
         ${target}-cc
         ${target}-c++
         ${target}-clang
@@ -488,9 +491,11 @@ while(library_variants)
 
     add_custom_target(${target}-runtime-alias
                         COMMAND
-                        ${CMAKE_COMMAND} -E create_symlink
-                        ${LLVM_BINARY_DIR}/lib/clang-runtimes/${target}
-                        ${LLVM_BINARY_DIR}/lib/clang-runtimes/${variant})
+                        ${CMAKE_COMMAND} -E chdir ${LLVM_BINARY_DIR}/lib/clang-runtimes
+                        ${CMAKE_COMMAND} -E create_symlink ${variant} ${target})
+    add_dependencies(llvm-toolchain ${target}-runtime-alias)
+
+
 
     # Create clang configuration files
     # https://clang.llvm.org/docs/UsersManual.html#configuration-files
