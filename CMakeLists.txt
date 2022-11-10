@@ -413,9 +413,13 @@ while(library_variants)
     if(target_arch STREQUAL "aarch64")
         set(target "aarch64-none-elf")
         set(cpu_family aarch64)
+        set(compiler_rt_os Generic)
+        set(d_apple)
     elseif(target_arch STREQUAL "arm64")
         set(target "arm64-apple-macos")
-        set(cpu_family arm64)
+        set(cpu_family aarch64)
+        set(compiler_rt_os Darwin)
+        set(d_apple -DAPPLE=ON)
     else()
         set(target "${target_arch}-none-eabi")
         set(cpu_family arm)
@@ -490,10 +494,18 @@ while(library_variants)
             COMPONENT llvm-toolchain)
 
     add_custom_target(${target}-runtime-alias
-                        COMMAND
-                        ${CMAKE_COMMAND} -E chdir ${LLVM_BINARY_DIR}/lib/clang-runtimes
-                        ${CMAKE_COMMAND} -E create_symlink ${variant} ${target})
+                        COMMAND ${CMAKE_COMMAND} -E create_symlink ${variant} ${LLVM_BINARY_DIR}/lib/clang-runtimes/${target})
     add_dependencies(llvm-toolchain ${target}-runtime-alias)
+
+    install(SCRIPT ${llvmproject_SOURCE_DIR}/llvm/cmake/modules/LLVMInstallSymlink.cmake
+            CODE "install_symlink(\"usr/include\" \"include\" \"lib/clang-runtimes/${variant}\")"
+            COMPONENT llvm-toolchain)
+
+    add_custom_target(${variant}-usr-include-alias
+                        COMMAND ${CMAKE_COMMAND} -E make_directory ${LLVM_BINARY_DIR}/lib/clang-runtimes/${variant}/usr
+                        COMMAND ${CMAKE_COMMAND} -E create_symlink ../include ${LLVM_BINARY_DIR}/lib/clang-runtimes/${variant}/usr/include)
+    add_dependencies(llvm-toolchain ${variant}-usr-include-alias)
+
 
     # Create clang configuration files
     # https://clang.llvm.org/docs/UsersManual.html#configuration-files
@@ -590,7 +602,7 @@ while(library_variants)
             INSTALL_DIR ${sysroot}
             PREFIX musl/${variant}
             DEPENDS clang lld llvm-ar llvm-config llvm-nm llvm-ranlib llvm-strip ${${target}_symlinks}
-            CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env PATH=${llvm_bin}:$ENV{PATH} CROSS_COMPILE=${target}- CC=${target}-clang "CFLAGS=${common_flags} -ggdb3 --sysroot ${sysroot}" ${musl_SOURCE_DIR}/configure --prefix=<INSTALL_DIR> --disable-shared --target=${cpu_family}-baremetal
+            CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env PATH=${llvm_bin}:$ENV{PATH} CROSS_COMPILE=${target}- CC=${target}-clang "CFLAGS=${common_flags} -ggdb3" ${musl_SOURCE_DIR}/configure --prefix=<INSTALL_DIR> --disable-shared --target=${cpu_family}-baremetal
             BUILD_COMMAND ${CMAKE_COMMAND} -E env PATH=${llvm_bin}:$ENV{PATH} make -j ${num_cores}
             INSTALL_COMMAND ${CMAKE_COMMAND} -E env PATH=${llvm_bin}:$ENV{PATH} make -j ${num_cores} install
             USES_TERMINAL_CONFIGURE TRUE
@@ -634,13 +646,17 @@ while(library_variants)
         # Set the cmake system name to Generic so that no host system
         # include files are searched. At least on OSX this problem
         # occurs.
-        -DCMAKE_SYSTEM_NAME=Generic
+        -DCMAKE_SYSTEM_NAME=${compiler_rt_os}
+        ${d_apple}
         -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY
         -DCOMPILER_RT_BAREMETAL_BUILD=ON
         -DCOMPILER_RT_BUILD_LIBFUZZER=OFF
         -DCOMPILER_RT_BUILD_PROFILE=OFF
         -DCOMPILER_RT_BUILD_SANITIZERS=OFF
         -DCOMPILER_RT_BUILD_XRAY=OFF
+        -DCOMPILER_RT_BUILD_ORC=OFF
+        -DCOMPILER_RT_BUILD_MEMPROF=OFF
+        -DCOMPILER_RT_BUILD_GWP_ASAN=OFF
         -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON
         -DLLVM_CONFIG_PATH=${llvm_bin}/llvm-config
         USES_TERMINAL_CONFIGURE TRUE
