@@ -415,11 +415,13 @@ while(library_variants)
         set(cpu_family aarch64)
         set(compiler_rt_os Generic)
         set(d_apple)
+        set(rt_dir generic)
     elseif(target_arch STREQUAL "arm64")
-        set(target "arm64-apple-macos")
+        set(target "arm64-apple-macosx")
         set(cpu_family aarch64)
         set(compiler_rt_os Darwin)
         set(d_apple -DAPPLE=ON)
+        set(rt_dir darwin)
     else()
         set(target "${target_arch}-none-eabi")
         set(cpu_family arm)
@@ -675,8 +677,8 @@ while(library_variants)
         TARGET compiler_rt_${variant}
         POST_BUILD
         COMMAND "${CMAKE_COMMAND}" -E copy_directory ${INSTALL_DIR} ${sysroot}
-        COMMAND "${CMAKE_COMMAND}" -E copy_directory ${sysroot}/lib/generic ${sysroot}/lib
-        COMMAND "${CMAKE_COMMAND}" -E rm -rf ${sysroot}/lib/generic
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory ${sysroot}/lib/${rt_dir} ${sysroot}/lib
+        COMMAND "${CMAKE_COMMAND}" -E rm -rf ${sysroot}/lib/${rt_dir}
     )
 
     # Other LLVM runtimes
@@ -737,6 +739,14 @@ while(library_variants)
         BUILD_ALWAYS TRUE
         CONFIGURE_HANDLED_BY_BUILD TRUE
     )
+
+    if(target_arch STREQUAL "arm64")
+        add_custom_target(${variant}-dummy-headers
+                            COMMAND ${CMAKE_COMMAND} -E make_directory ${LLVM_BINARY_DIR}/lib/clang-runtimes/${variant}/include/mach-o
+                            COMMAND ${CMAKE_COMMAND} -E touch ${LLVM_BINARY_DIR}/lib/clang-runtimes/${variant}/include/AvailabilityMacros.h
+                            COMMAND ${CMAKE_COMMAND} -E touch ${LLVM_BINARY_DIR}/lib/clang-runtimes/${variant}/include/mach-o/dyld.h)
+        add_dependencies(llvm-toolchain-runtimes ${variant}-dummy-headers)
+    endif()
 
     add_dependencies(
         llvm-toolchain-runtimes
