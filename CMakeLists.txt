@@ -491,15 +491,15 @@ while(library_variants)
     add_dependencies(llvm-toolchain ${${target}_symlinks})
     list(APPEND CPACK_COMPONENTS_ALL ${${target}_symlinks})
 
-    install(SCRIPT ${llvmproject_SOURCE_DIR}/llvm/cmake/modules/LLVMInstallSymlink.cmake
+    install(SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/cmake/InstallSymlink.cmake
             CODE "install_symlink(\"${target}\" \"${variant}\" \"lib/clang-runtimes\")"
             COMPONENT llvm-toolchain)
 
-    add_custom_target(${target}-runtime-alias
+    add_custom_target(${variant}-runtime-alias
                         COMMAND ${CMAKE_COMMAND} -E create_symlink ${variant} ${LLVM_BINARY_DIR}/lib/clang-runtimes/${target})
-    add_dependencies(llvm-toolchain ${target}-runtime-alias)
+    add_dependencies(llvm-toolchain ${variant}-runtime-alias)
 
-    install(SCRIPT ${llvmproject_SOURCE_DIR}/llvm/cmake/modules/LLVMInstallSymlink.cmake
+    install(SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/cmake/InstallSymlink.cmake
             CODE "install_symlink(\"usr/include\" \"include\" \"lib/clang-runtimes/${variant}\")"
             COMPONENT llvm-toolchain)
 
